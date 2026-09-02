@@ -267,13 +267,12 @@
   z-index: 3;
   width: min(88%, 620px);
   display: flex;
-  min-height: 38px;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  overflow: hidden;
+  overflow: visible;
   border: 2px solid var(--ink);
-  padding: 0.45rem 0.75rem;
+  padding: 0.2rem 0.75rem;
   text-align: left;
   color: var(--ink);
   pointer-events: auto;
@@ -287,14 +286,30 @@
 .timeline-entry:focus-visible {
   z-index: 5;
   height: auto !important;
-  min-height: 38px;
+  min-height: 42px;
   overflow: visible;
+  padding-block: 0.45rem;
   transform: translate(-1px, -1px);
   filter: saturate(1.08);
 }
 
+.timeline-entry--compact {
+  padding-block: 0;
+}
+
+.timeline-entry--compact::after {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 32px;
+  content: '';
+  transform: translateY(-50%);
+}
+
 .timeline-entry-summary {
   display: block;
+  max-height: 100%;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -304,9 +319,15 @@
   line-height: 1.25;
 }
 
+.timeline-entry--compact .timeline-entry-summary {
+  opacity: 0;
+}
+
 .timeline-entry:hover .timeline-entry-summary,
 .timeline-entry:focus-visible .timeline-entry-summary {
+  max-height: none;
   overflow: visible;
+  opacity: 1;
   text-overflow: clip;
   white-space: normal;
 }
@@ -327,10 +348,6 @@
 
 .timeline-entry--flash {
   animation: entry-flash 1.05s ease;
-}
-
-.timeline-entry--front {
-  z-index: 7;
 }
 
 .now-line {
@@ -931,6 +948,28 @@
 
   .timeline-entry--red {
     left: 2%;
+  }
+
+  .timeline-entry--expanded {
+    z-index: 7;
+    height: auto !important;
+    min-height: 44px;
+    overflow: visible;
+    padding-block: 0.45rem;
+    filter: saturate(1.08);
+    transform: translate(-1px, -1px);
+  }
+
+  .timeline-entry--expanded::after {
+    display: none;
+  }
+
+  .timeline-entry--expanded .timeline-entry-summary {
+    max-height: none;
+    overflow: visible;
+    opacity: 1;
+    text-overflow: clip;
+    white-space: normal;
   }
 
   .now-line {

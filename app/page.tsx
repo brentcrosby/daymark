@@ -121,7 +121,7 @@ export default function Home() {
   const [customDuration, setCustomDuration] = useState(false);
   const [entryError, setEntryError] = useState('');
   const [flashId, setFlashId] = useState<string | null>(null);
-  const [frontEntryId, setFrontEntryId] = useState<string | null>(null);
+  const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
   const [reviewOpen, setReviewOpen] = useState(false);
 
   const [accountOpen, setAccountOpen] = useState(false);
@@ -310,7 +310,7 @@ export default function Home() {
   }
 
   function openEdit(entry: TimelineEntry) {
-    setFrontEntryId(null);
+    setExpandedEntryId(null);
     setEditorMode('edit');
     setEditingEntry(entry);
     setEntryTitle(entry.title);
@@ -351,23 +351,8 @@ export default function Home() {
       return;
     }
 
-    const promotedEntry = selectedEntries.find(
-      (item) => item.id === frontEntryId,
-    );
-    const promotedEntryIsOverlapping =
-      promotedEntry && entriesOverlap(entry, promotedEntry);
-    const entryIndex = selectedEntries.findIndex(
-      (item) => item.id === entry.id,
-    );
-    const laterOverlappingEntry = selectedEntries
-      .slice(entryIndex + 1)
-      .some((item) => entriesOverlap(entry, item));
-    const isFrontEntry =
-      frontEntryId === entry.id ||
-      (!promotedEntryIsOverlapping && !laterOverlappingEntry);
-
-    if (!isFrontEntry) {
-      setFrontEntryId(entry.id);
+    if (expandedEntryId !== entry.id) {
+      setExpandedEntryId(entry.id);
       return;
     }
 
@@ -818,34 +803,38 @@ export default function Home() {
               )}
 
               <div className="timeline-entries" aria-live="polite">
-                {selectedEntries.map((entry) => (
-                  <button
-                    key={entry.id}
-                    className={cn(
-                      'timeline-entry',
-                      `timeline-entry--${entry.color}`,
-                      frontEntryId === entry.id && 'timeline-entry--front',
-                      flashId === entry.id && 'timeline-entry--flash',
-                    )}
-                    style={{
-                      top: (entry.startMinute / 60) * TIMELINE_ROW_HEIGHT + 2,
-                      height: Math.max(
-                        38,
-                        ((entry.endMinute - entry.startMinute) / 60) *
-                          TIMELINE_ROW_HEIGHT -
-                          4,
-                      ),
-                    }}
-                    type="button"
-                    onClick={() => handleEntryClick(entry)}
-                    aria-label={`Edit ${entry.title}, ${formatTime(entry.startMinute)} to ${formatTime(entry.endMinute)}`}
-                  >
-                    <span className="timeline-entry-summary">
-                      {formatTime(entry.startMinute)} -{' '}
-                      {formatTime(entry.endMinute)} - {entry.title}
-                    </span>
-                  </button>
-                ))}
+                {selectedEntries.map((entry) => {
+                  const durationHeight =
+                    ((entry.endMinute - entry.startMinute) / 60) *
+                    TIMELINE_ROW_HEIGHT;
+                  const isExpanded = expandedEntryId === entry.id;
+
+                  return (
+                    <button
+                      key={entry.id}
+                      className={cn(
+                        'timeline-entry',
+                        `timeline-entry--${entry.color}`,
+                        durationHeight < 28 && 'timeline-entry--compact',
+                        isExpanded && 'timeline-entry--expanded',
+                        flashId === entry.id && 'timeline-entry--flash',
+                      )}
+                      style={{
+                        top: (entry.startMinute / 60) * TIMELINE_ROW_HEIGHT,
+                        height: Math.max(2, durationHeight),
+                      }}
+                      type="button"
+                      onClick={() => handleEntryClick(entry)}
+                      aria-expanded={isExpanded}
+                      aria-label={`View or edit ${entry.title}, ${formatTime(entry.startMinute)} to ${formatTime(entry.endMinute)}`}
+                    >
+                      <span className="timeline-entry-summary">
+                        {formatTime(entry.startMinute)} -{' '}
+                        {formatTime(entry.endMinute)} - {entry.title}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
               {guestLoaded && selectedEntries.length === 0 && (
@@ -1739,12 +1728,6 @@ function mergeEntry(entries: TimelineEntry[], entry: TimelineEntry) {
   const next = [...entries];
   next[existingIndex] = entry;
   return next;
-}
-
-function entriesOverlap(first: TimelineEntry, second: TimelineEntry) {
-  return (
-    first.startMinute < second.endMinute && first.endMinute > second.startMinute
-  );
 }
 
 function makeId() {
