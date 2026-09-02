@@ -938,17 +938,21 @@
   }
 
   .day-review-dialog {
-    left: 0 !important;
-    right: 0;
-    top: auto !important;
-    bottom: 0;
-    width: 100%;
-    max-width: 100%;
+    inset: auto 0 0 !important;
+    width: 100dvw !important;
+    max-width: none !important;
     max-height: 92dvh;
     overflow: hidden;
-    translate: 0 0 !important;
+    margin: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom);
+    translate: none !important;
     transform: none !important;
     border-bottom: 0;
+  }
+
+  .day-review-list {
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .day-review-item {

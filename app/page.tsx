@@ -1205,7 +1205,10 @@ function DayReviewDialog({
 }: DayReviewDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="day-review-dialog rounded-none border-2 border-ink p-0 shadow-[7px_7px_0_#111] sm:max-w-[620px]">
+      <DialogContent
+        mobileSheet
+        className="day-review-dialog rounded-none border-2 border-ink p-0 shadow-[7px_7px_0_#111] sm:max-w-[620px]"
+      >
         <DialogHeader className="border-b-2 border-ink bg-sun p-5 pr-14">
           <DialogTitle className="text-2xl font-black tracking-[-0.04em]">
             {isToday ? 'Today' : formatDay(date)} in review
