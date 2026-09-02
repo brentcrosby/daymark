@@ -152,7 +152,11 @@ export default function Home() {
     const rememberedDuration = Number(
       window.localStorage.getItem(DURATION_STORAGE_KEY),
     );
-    if ([5, 15, 30, 60].includes(rememberedDuration))
+    if (
+      Number.isFinite(rememberedDuration) &&
+      rememberedDuration >= 5 &&
+      rememberedDuration <= 12 * 60
+    )
       setSelectedDuration(rememberedDuration);
 
     const handleOnline = () => setIsOnline(true);
@@ -258,19 +262,13 @@ export default function Home() {
     [isToday, selectedEntries],
   );
 
-  const editorRange = useMemo(() => {
-    if (editorMode === 'quick' && !customDuration) {
-      const endMinute = Math.max(5, snapMinute(minutesNow(), 5));
-      return {
-        startMinute: Math.max(0, endMinute - selectedDuration),
-        endMinute,
-      };
-    }
-    return {
+  const editorRange = useMemo(
+    () => ({
       startMinute: inputToMinute(entryStart),
       endMinute: inputToMinute(entryEnd),
-    };
-  }, [customDuration, editorMode, entryEnd, entryStart, selectedDuration]);
+    }),
+    [entryEnd, entryStart],
+  );
 
   const hasOverlap = overlaps(
     selectedEntries,
@@ -318,9 +316,33 @@ export default function Home() {
     setEntryTitle(entry.title);
     setEntryStart(minuteToInput(entry.startMinute));
     setEntryEnd(minuteToInput(entry.endMinute));
-    setCustomDuration(true);
+    setSelectedDuration(entry.endMinute - entry.startMinute);
+    setCustomDuration(false);
     setEntryError('');
     setEntryOpen(true);
+  }
+
+  function setEditorDuration(duration: number) {
+    const currentStart = editorRange.startMinute;
+    const currentEnd = editorRange.endMinute;
+    const maxDuration =
+      editorMode === 'quick'
+        ? Math.max(5, currentEnd)
+        : Math.max(5, 24 * 60 - 1 - currentStart);
+    const safeDuration = Math.max(
+      5,
+      Math.min(maxDuration, snapMinute(duration, 5)),
+    );
+
+    setSelectedDuration(safeDuration);
+    if (editorMode === 'quick') {
+      setEntryStart(minuteToInput(Math.max(0, currentEnd - safeDuration)));
+    } else {
+      setEntryEnd(
+        minuteToInput(Math.min(24 * 60 - 1, currentStart + safeDuration)),
+      );
+    }
+    setEntryError('');
   }
 
   function handleEntryClick(entry: TimelineEntry) {
@@ -916,23 +938,25 @@ export default function Home() {
         mode={editorMode}
         title={entryTitle}
         setTitle={setEntryTitle}
-        duration={selectedDuration}
-        setDuration={(duration) => {
-          setSelectedDuration(duration);
-          setCustomDuration(false);
-          if (editorMode === 'detail') {
-            const startMinute = inputToMinute(entryStart);
-            setEntryEnd(
-              minuteToInput(Math.min(24 * 60 - 1, startMinute + duration)),
-            );
-          }
-        }}
+        duration={Math.max(
+          0,
+          editorRange.endMinute - editorRange.startMinute,
+        )}
+        setDuration={setEditorDuration}
         customDuration={customDuration}
         setCustomDuration={setCustomDuration}
         start={entryStart}
-        setStart={setEntryStart}
+        setStart={(time) => {
+          setEntryStart(time);
+          const nextDuration = inputToMinute(entryEnd) - inputToMinute(time);
+          if (nextDuration > 0) setSelectedDuration(nextDuration);
+        }}
         end={entryEnd}
-        setEnd={setEntryEnd}
+        setEnd={(time) => {
+          setEntryEnd(time);
+          const nextDuration = inputToMinute(time) - inputToMinute(entryStart);
+          if (nextDuration > 0) setSelectedDuration(nextDuration);
+        }}
         range={editorRange}
         hasOverlap={hasOverlap}
         error={entryError}
@@ -1241,8 +1265,9 @@ function DayReviewDialog({
 
 function EntryDialog(props: EntryDialogProps) {
   const isQuick = props.mode === 'quick';
-  const isDetail = props.mode === 'detail';
   const isEdit = props.mode === 'edit';
+  const durationHours = Math.floor(props.duration / 60);
+  const durationMinutes = props.duration % 60;
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent className="quick-dialog rounded-none border-2 border-ink p-0 shadow-[7px_7px_0_#111] sm:max-w-[480px]">
@@ -1257,7 +1282,7 @@ function EntryDialog(props: EntryDialogProps) {
           <DialogDescription className="font-medium">
             {isQuick
               ? 'Add it to the time just before now.'
-              : 'Use exact times for a more detailed record.'}
+              : 'Set how long it took, then fine-tune the times if needed.'}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={props.onSubmit}>
@@ -1278,43 +1303,91 @@ function EntryDialog(props: EntryDialogProps) {
               aria-label="What did you do?"
             />
 
-            {(isQuick || isDetail) && (
-              <div>
-                <p className="mb-2 text-xs font-black uppercase tracking-[0.14em]">
-                  {isQuick ? 'During the past' : 'Duration from selected time'}
-                </p>
-                <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+            <section className="duration-control" aria-labelledby="duration-label">
+              <div className="duration-control__heading">
+                <p id="duration-label">How long did it take?</p>
+                <strong>{formatDuration(props.duration)}</strong>
+              </div>
+
+              <div className="duration-steppers">
+                <div className="duration-stepper">
+                  <button
+                    type="button"
+                    onClick={() => props.setDuration(props.duration - 60)}
+                    disabled={props.duration <= 5}
+                    aria-label="Decrease duration by one hour"
+                  >
+                    <ChevronLeft />
+                  </button>
+                  <span>
+                    <strong>{durationHours}</strong>
+                    <small>{durationHours === 1 ? 'hour' : 'hours'}</small>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => props.setDuration(props.duration + 60)}
+                    aria-label="Increase duration by one hour"
+                  >
+                    <ChevronRight />
+                  </button>
+                </div>
+
+                <div className="duration-stepper">
+                  <button
+                    type="button"
+                    onClick={() => props.setDuration(props.duration - 5)}
+                    disabled={props.duration <= 5}
+                    aria-label="Decrease duration by five minutes"
+                  >
+                    <ChevronLeft />
+                  </button>
+                  <span>
+                    <strong>{durationMinutes}</strong>
+                    <small>minutes</small>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => props.setDuration(props.duration + 5)}
+                    aria-label="Increase duration by five minutes"
+                  >
+                    <ChevronRight />
+                  </button>
+                </div>
+              </div>
+
+              <div className="duration-quick-set">
+                <span>Quick set</span>
+                <div>
                   {[5, 15, 30, 60].map((minutes) => (
                     <button
                       key={minutes}
                       type="button"
                       className={cn(
                         'duration-chip',
-                        !props.customDuration &&
-                          props.duration === minutes &&
-                          'duration-chip--active',
+                        props.duration === minutes && 'duration-chip--active',
                       )}
                       onClick={() => props.setDuration(minutes)}
                     >
                       {minutes === 60 ? '1 hr' : `${minutes}m`}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    className={cn(
-                      'duration-chip',
-                      props.customDuration && 'duration-chip--active',
-                    )}
-                    onClick={() => props.setCustomDuration(true)}
-                  >
-                    Custom
-                  </button>
                 </div>
               </div>
-            )}
+            </section>
 
-            {(isEdit || props.customDuration) && (
-              <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              className="manual-time-toggle"
+              onClick={() => props.setCustomDuration(!props.customDuration)}
+              aria-expanded={props.customDuration}
+            >
+              <Clock3 />
+              {props.customDuration ? 'Hide exact times' : 'Enter exact times'}
+              {props.customDuration ? <ChevronLeft /> : <ChevronRight />}
+            </button>
+
+            {props.customDuration && (
+              <div className="manual-time-fields grid grid-cols-2 gap-3">
                 <label className="time-field" htmlFor="entry-start">
                   <span>Start</span>
                   <Input
