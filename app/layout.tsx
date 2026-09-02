@@ -25,7 +25,24 @@ export const metadata: Metadata = {
   description:
     'A fast, private reverse scheduler for logging how you spent your day.',
   manifest: './manifest.webmanifest',
-  icons: { icon: './favicon.svg', apple: './favicon.svg' },
+  icons: {
+    icon: [
+      { url: './favicon.svg', type: 'image/svg+xml' },
+      { url: './icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [
+      {
+        url: './apple-touch-icon.png',
+        sizes: '180x180',
+        type: 'image/png',
+      },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'Daymark',
+    statusBarStyle: 'default',
+  },
   openGraph: {
     title: 'Daymark — A record of what got done',
     description:
