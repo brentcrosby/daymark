@@ -1,4 +1,4 @@
-const CACHE_NAME = 'daymark-v8';
+const CACHE_NAME = 'daymark-v9';
 
 self.addEventListener('install', () => self.skipWaiting());
 

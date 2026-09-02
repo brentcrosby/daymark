@@ -655,9 +655,11 @@ export default function Home() {
       <header className="sticky top-0 z-30 border-b-2 border-ink bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-[72px] max-w-[1240px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <button
+            type="button"
             className="flex items-center gap-2.5"
-            onClick={() => setSelectedDate(today)}
-            aria-label="Go to today"
+            onClick={() => window.location.reload()}
+            aria-label="Reload Daymark"
+            title="Reload Daymark"
           >
             <span className="grid size-8 place-items-center border-2 border-ink bg-sun text-sm font-black shadow-[3px_3px_0_#111]">
               D
