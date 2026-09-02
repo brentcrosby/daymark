@@ -98,6 +98,8 @@ type EditorMode = 'quick' | 'detail' | 'edit';
 type SyncStatus = 'local' | 'saved' | 'syncing' | 'offline' | 'error';
 
 const hours = Array.from({ length: 24 }, (_, index) => index);
+const SHORT_ENTRY_THRESHOLD = 30;
+const SHORT_ENTRY_MIN_HEIGHT = 20;
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState('');
@@ -806,9 +808,10 @@ export default function Home() {
 
               <div className="timeline-entries" aria-live="polite">
                 {selectedEntries.map((entry) => {
+                  const durationMinutes = entry.endMinute - entry.startMinute;
                   const durationHeight =
-                    ((entry.endMinute - entry.startMinute) / 60) *
-                    TIMELINE_ROW_HEIGHT;
+                    (durationMinutes / 60) * TIMELINE_ROW_HEIGHT;
+                  const isShort = durationHeight < SHORT_ENTRY_THRESHOLD;
                   const isExpanded = expandedEntryId === entry.id;
 
                   return (
@@ -817,19 +820,33 @@ export default function Home() {
                       className={cn(
                         'timeline-entry',
                         `timeline-entry--${entry.color}`,
-                        durationHeight < 28 && 'timeline-entry--compact',
+                        isShort && 'timeline-entry--compact',
                         isExpanded && 'timeline-entry--expanded',
                         flashId === entry.id && 'timeline-entry--flash',
                       )}
                       style={{
                         top: (entry.startMinute / 60) * TIMELINE_ROW_HEIGHT,
-                        height: Math.max(2, durationHeight),
+                        height: isShort
+                          ? Math.max(SHORT_ENTRY_MIN_HEIGHT, durationHeight)
+                          : durationHeight,
                       }}
                       type="button"
                       onClick={() => handleEntryClick(entry)}
                       aria-expanded={isExpanded}
                       aria-label={`View or edit ${entry.title}, ${formatTime(entry.startMinute)} to ${formatTime(entry.endMinute)}`}
                     >
+                      {isShort && (
+                        <>
+                          <span
+                            className="timeline-entry-duration-rail"
+                            style={{ height: Math.max(4, durationHeight) }}
+                            aria-hidden="true"
+                          />
+                          <span className="timeline-entry-duration">
+                            {formatDuration(durationMinutes)}
+                          </span>
+                        </>
+                      )}
                       <span className="timeline-entry-summary">
                         {formatTime(entry.startMinute)} -{' '}
                         {formatTime(entry.endMinute)} - {entry.title}
