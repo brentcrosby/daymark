@@ -1,0 +1,18 @@
+{
+  "name": "Daymark — A record of what got done",
+  "short_name": "Daymark",
+  "description": "A fast, private reverse scheduler for logging how you spent your day.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8f7f2",
+  "theme_color": "#ffd84a",
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

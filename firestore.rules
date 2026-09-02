@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/entries/{entryId} {
+      function ownsEntry() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      function validEntry() {
+        return request.resource.data.id == entryId
+          && request.resource.data.title is string
+          && request.resource.data.title.size() > 0
+          && request.resource.data.title.size() <= 2000
+          && request.resource.data.date is string
+          && request.resource.data.startMinute is int
+          && request.resource.data.endMinute is int
+          && request.resource.data.startMinute >= 0
+          && request.resource.data.endMinute <= 1440
+          && request.resource.data.endMinute > request.resource.data.startMinute;
+      }
+
+      allow read, delete: if ownsEntry();
+      allow create, update: if ownsEntry() && validEntry();
+    }
+  }
+}
