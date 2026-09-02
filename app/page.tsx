@@ -324,7 +324,7 @@ export default function Home() {
         : Math.max(5, 24 * 60 - 1 - currentStart);
     const safeDuration = Math.max(
       5,
-      Math.min(maxDuration, snapMinute(duration, 5)),
+      Math.min(maxDuration, Math.round(duration)),
     );
 
     setSelectedDuration(safeDuration);
@@ -1262,6 +1262,35 @@ function EntryDialog(props: EntryDialogProps) {
   const isEdit = props.mode === 'edit';
   const durationHours = Math.floor(props.duration / 60);
   const durationMinutes = props.duration % 60;
+  const [hoursText, setHoursText] = useState(String(durationHours));
+  const [minutesText, setMinutesText] = useState(String(durationMinutes));
+
+  useEffect(() => {
+    setHoursText(String(durationHours));
+    setMinutesText(String(durationMinutes));
+  }, [durationHours, durationMinutes]);
+
+  function updateHours(value: string) {
+    setHoursText(value);
+    if (value === '') return;
+    const hours = Number(value);
+    if (!Number.isFinite(hours)) return;
+    props.setDuration(Math.max(0, hours) * 60 + durationMinutes);
+  }
+
+  function updateMinutes(value: string) {
+    setMinutesText(value);
+    if (value === '') return;
+    const minutes = Number(value);
+    if (!Number.isFinite(minutes)) return;
+    props.setDuration(durationHours * 60 + Math.max(0, minutes));
+  }
+
+  function restoreDurationText() {
+    setHoursText(String(durationHours));
+    setMinutesText(String(durationMinutes));
+  }
+
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent
@@ -1316,10 +1345,20 @@ function EntryDialog(props: EntryDialogProps) {
                   >
                     <ChevronLeft />
                   </button>
-                  <span>
-                    <strong>{durationHours}</strong>
+                  <label className="duration-value">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      inputMode="numeric"
+                      value={hoursText}
+                      onChange={(event) => updateHours(event.target.value)}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onBlur={restoreDurationText}
+                      aria-label="Duration hours"
+                    />
                     <small>{durationHours === 1 ? 'hour' : 'hours'}</small>
-                  </span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => props.setDuration(props.duration + 60)}
@@ -1338,10 +1377,20 @@ function EntryDialog(props: EntryDialogProps) {
                   >
                     <ChevronLeft />
                   </button>
-                  <span>
-                    <strong>{durationMinutes}</strong>
+                  <label className="duration-value">
+                    <input
+                      type="number"
+                      min="0"
+                      step="5"
+                      inputMode="numeric"
+                      value={minutesText}
+                      onChange={(event) => updateMinutes(event.target.value)}
+                      onFocus={(event) => event.currentTarget.select()}
+                      onBlur={restoreDurationText}
+                      aria-label="Duration minutes"
+                    />
                     <small>minutes</small>
-                  </span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => props.setDuration(props.duration + 5)}

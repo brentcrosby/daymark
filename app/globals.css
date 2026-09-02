@@ -495,7 +495,7 @@
   stroke-width: 3;
 }
 
-.duration-stepper > span {
+.duration-value {
   display: flex;
   min-width: 0;
   flex-direction: column;
@@ -504,13 +504,32 @@
   line-height: 1;
 }
 
-.duration-stepper > span strong {
+.duration-value input {
+  width: 100%;
+  appearance: textfield;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-align: center;
   font-family: var(--font-geist-mono);
   font-size: 1.15rem;
   font-weight: 950;
+  line-height: 1;
+  outline: none;
 }
 
-.duration-stepper > span small {
+.duration-value input::-webkit-inner-spin-button,
+.duration-value input::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
+.duration-value input:focus-visible {
+  background: #eaf0ff;
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+
+.duration-value small {
   margin-top: 0.25rem;
   color: var(--muted-foreground);
   font-size: 0.62rem;
