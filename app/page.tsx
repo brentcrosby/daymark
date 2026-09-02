@@ -51,6 +51,7 @@ import {
 
 import { PwaRegister } from '@/components/pwa-register';
 import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
 import {
   Dialog,
   DialogContent,
@@ -60,10 +61,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import {
   DURATION_STORAGE_KEY,
   TIMELINE_ROW_HEIGHT,
+  dateFromKey,
   dateKey,
   entryColor,
   formatDay,
@@ -1046,6 +1053,9 @@ function DateNavigator({
   onChange: (date: string) => void;
   className?: string;
 }) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const activeDate = selectedDate || today;
+
   return (
     <div className={cn('items-center justify-between gap-2', className)}>
       <Button
@@ -1057,23 +1067,48 @@ function DateNavigator({
       >
         <ChevronLeft />
       </Button>
-      <label className="date-picker">
-        <CalendarDays />
-        <span>
-          {selectedDate === today
-            ? `Today · ${formatDay(today, true)}`
-            : formatDay(selectedDate, true)}
-        </span>
-        <input
-          type="date"
-          value={selectedDate}
-          max={today}
-          onChange={(event) =>
-            event.target.value && onChange(event.target.value)
-          }
-          aria-label="Choose date"
-        />
-      </label>
+      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <PopoverTrigger className="date-picker" aria-label="Choose date">
+          <CalendarDays />
+          <span>
+            {selectedDate === today
+              ? `Today · ${formatDay(today, true)}`
+              : formatDay(activeDate, true)}
+          </span>
+        </PopoverTrigger>
+        <PopoverContent
+          align="center"
+          sideOffset={8}
+          className="date-calendar-popover w-auto rounded-none border-2 border-ink bg-white p-2 shadow-[5px_5px_0_#111] ring-0"
+        >
+          <Calendar
+            mode="single"
+            selected={dateFromKey(activeDate)}
+            defaultMonth={dateFromKey(activeDate)}
+            disabled={{ after: dateFromKey(today) }}
+            onSelect={(date) => {
+              if (!date) return;
+              onChange(dateKey(date));
+              setCalendarOpen(false);
+            }}
+            className="daymark-calendar"
+            buttonVariant="ghost"
+          />
+          {activeDate !== today && (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-9 w-full rounded-none border-2 border-ink bg-sun font-black"
+              onClick={() => {
+                onChange(today);
+                setCalendarOpen(false);
+              }}
+            >
+              Jump to today
+            </Button>
+          )}
+        </PopoverContent>
+      </Popover>
       <Button
         variant="ghost"
         size="icon"

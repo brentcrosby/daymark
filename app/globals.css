@@ -119,12 +119,26 @@
   width: 1rem;
 }
 
-.date-picker input {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  opacity: 0;
-  cursor: pointer;
+.date-calendar-popover {
+  z-index: 70;
+}
+
+.daymark-calendar {
+  --cell-size: 2.35rem;
+  background: #fff;
+  font-weight: 750;
+}
+
+.daymark-calendar button {
+  border-radius: 0;
+  font-weight: 750;
+}
+
+.daymark-calendar [data-selected-single='true'] {
+  border: 2px solid var(--ink);
+  background: var(--blue);
+  color: #fff;
+  box-shadow: 2px 2px 0 var(--ink);
 }
 
 .summary-card {
