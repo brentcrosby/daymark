@@ -661,7 +661,7 @@ export default function Home() {
             aria-label="Reload Daymark"
             title="Reload Daymark"
           >
-            <span className="grid size-8 place-items-center border-2 border-ink bg-sun text-sm font-black shadow-[3px_3px_0_#111]">
+            <span className="daymark-mark grid size-8 place-items-center border-2 border-ink bg-sun text-sm font-black shadow-[3px_3px_0_#111]">
               D
             </span>
             <span className="text-lg font-black tracking-[-0.04em]">
