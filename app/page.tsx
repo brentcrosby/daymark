@@ -75,7 +75,6 @@ import {
   loadGuestEntries,
   minuteToInput,
   minutesNow,
-  overlaps,
   saveGuestEntries,
   shiftDate,
   snapMinute,
@@ -268,13 +267,6 @@ export default function Home() {
       endMinute: inputToMinute(entryEnd),
     }),
     [entryEnd, entryStart],
-  );
-
-  const hasOverlap = overlaps(
-    selectedEntries,
-    editorRange.startMinute,
-    editorRange.endMinute,
-    editingEntry?.id,
   );
 
   function notify(message: string) {
@@ -959,7 +951,6 @@ export default function Home() {
           if (nextDuration > 0) setSelectedDuration(nextDuration);
         }}
         range={editorRange}
-        hasOverlap={hasOverlap}
         error={entryError}
         onSubmit={handleEntrySubmit}
         onDelete={deleteEditingEntry}
@@ -1189,7 +1180,6 @@ type EntryDialogProps = {
   end: string;
   setEnd: (time: string) => void;
   range: { startMinute: number; endMinute: number };
-  hasOverlap: boolean;
   error: string;
   onSubmit: (event: SyntheticEvent<HTMLFormElement>) => void;
   onDelete: () => void;
@@ -1425,11 +1415,6 @@ function EntryDialog(props: EntryDialogProps) {
                 )}
               </strong>
             </div>
-            {props.hasOverlap && (
-              <p className="overlap-note">
-                This overlaps another entry. That’s okay—you can still save it.
-              </p>
-            )}
             {props.error && (
               <p className="form-error" role="alert">
                 {props.error}

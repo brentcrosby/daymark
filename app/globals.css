@@ -717,7 +717,6 @@
   padding: 0.15rem 0.4rem;
 }
 
-.overlap-note,
 .form-error {
   border-left: 5px solid var(--red);
   background: #fff0ee;
