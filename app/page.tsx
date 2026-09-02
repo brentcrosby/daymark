@@ -1270,7 +1270,10 @@ function EntryDialog(props: EntryDialogProps) {
   const durationMinutes = props.duration % 60;
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="quick-dialog rounded-none border-2 border-ink p-0 shadow-[7px_7px_0_#111] sm:max-w-[480px]">
+      <DialogContent
+        mobileSheet
+        className="quick-dialog rounded-none border-2 border-ink p-0 shadow-[7px_7px_0_#111] sm:max-w-[480px]"
+      >
         <DialogHeader className="border-b-2 border-ink p-5 pr-14">
           <DialogTitle className="text-2xl font-black tracking-[-0.04em]">
             {isEdit

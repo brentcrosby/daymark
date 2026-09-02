@@ -1,4 +1,4 @@
-const CACHE_NAME = 'daymark-v1';
+const CACHE_NAME = 'daymark-v3';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -18,14 +18,18 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
   if (
     event.request.method !== 'GET' ||
-    new URL(event.request.url).origin !== self.location.origin
+    url.origin !== self.location.origin ||
+    url.pathname.endsWith('/sw.js')
   )
     return;
 
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, {
+      cache: event.request.mode === 'navigate' ? 'reload' : 'default',
+    })
       .then((response) => {
         const copy = response.clone();
         void caches
