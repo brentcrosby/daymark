@@ -288,6 +288,7 @@ export default function Home() {
     setSelectedDate(today);
     setEditorMode('quick');
     setEditingEntry(null);
+    setEntryTitle('');
     setEntryStart(minuteToInput(Math.max(0, endMinute - selectedDuration)));
     setEntryEnd(minuteToInput(endMinute));
     setCustomDuration(false);
