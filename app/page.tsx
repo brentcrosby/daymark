@@ -38,6 +38,8 @@ import {
   Target,
   Trash2,
   Trophy,
+  Redo2,
+  Undo2,
   WifiOff,
 } from 'lucide-react';
 import {
@@ -53,6 +55,7 @@ import {
 import {
   collection,
   doc,
+  deleteDoc,
   getDocs,
   onSnapshot,
   setDoc,
@@ -122,6 +125,22 @@ type TimelineDrag = {
   startY: number;
   moved: boolean;
 };
+type HistoryAction =
+  | {
+      id: string;
+      label: string;
+      kind: 'entry';
+      before: TimelineEntry | null;
+      after: TimelineEntry | null;
+    }
+  | {
+      id: string;
+      label: string;
+      kind: 'markers';
+      date: string;
+      before: DailyReflection | null;
+      after: DailyReflection | null;
+    };
 
 const hours = Array.from({ length: 24 }, (_, index) => index);
 const SHORT_ENTRY_THRESHOLD = 30;
@@ -183,6 +202,9 @@ export default function Home() {
   const [toast, setToast] = useState('');
   const [toastActionEntry, setToastActionEntry] =
     useState<TimelineEntry | null>(null);
+  const [undoStack, setUndoStack] = useState<HistoryAction[]>([]);
+  const [redoStack, setRedoStack] = useState<HistoryAction[]>([]);
+  const [historyBusy, setHistoryBusy] = useState(false);
 
   const nowMarkerRef = useRef<HTMLDivElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -191,6 +213,8 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timelineEntryRefs = useRef(new Map<string, HTMLButtonElement>());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const undoRef = useRef<() => Promise<void>>(async () => {});
+  const redoRef = useRef<() => Promise<void>>(async () => {});
 
   const today = dateKey();
   const activeEntries = user ? cloudEntries : guestEntries;
@@ -386,6 +410,46 @@ export default function Home() {
     },
     [],
   );
+
+  // History is deliberately kept to this browser session and account. The
+  // underlying records still use the normal guest/Firestore persistence path.
+  useEffect(() => {
+    setUndoStack([]);
+    setRedoStack([]);
+  }, [user?.uid]);
+
+  useEffect(() => {
+    function handleHistoryShortcut(event: KeyboardEvent) {
+      if (
+        event.defaultPrevented ||
+        (!(event.metaKey || event.ctrlKey) || event.altKey) ||
+        event.key.toLowerCase() !== 'z'
+      ) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          'input, textarea, select, [contenteditable="true"]',
+        )
+      ) {
+        return;
+      }
+
+      if (event.shiftKey) {
+        if (!redoStack.length || historyBusy) return;
+        event.preventDefault();
+        void redoRef.current();
+      } else {
+        if (!undoStack.length || historyBusy) return;
+        event.preventDefault();
+        void undoRef.current();
+      }
+    }
+
+    window.addEventListener('keydown', handleHistoryShortcut);
+    return () => window.removeEventListener('keydown', handleHistoryShortcut);
+  }, [historyBusy, redoStack, undoStack]);
 
   const totalMinutes = useMemo(
     () =>
@@ -745,6 +809,92 @@ export default function Home() {
     });
   }
 
+  function recordHistory(action: HistoryAction) {
+    setUndoStack((current) => [...current, action].slice(-30));
+    setRedoStack([]);
+  }
+
+  async function removeReflection(date: string) {
+    if (user && services) {
+      setCloudReflections((current) =>
+        current.filter((reflection) => reflection.date !== date),
+      );
+      setSyncStatus(isOnline ? 'syncing' : 'offline');
+      try {
+        await deleteDoc(
+          doc(
+            services.db,
+            'users',
+            user.uid,
+            'entries',
+            reflectionRecordId(date),
+          ),
+        );
+      } catch {
+        setSyncStatus('error');
+        notify('Saved offline. Daymark will retry when you reconnect.');
+      }
+      return;
+    }
+
+    setGuestReflections((current) => {
+      const next = current.filter((reflection) => reflection.date !== date);
+      saveGuestReflections(next);
+      return next;
+    });
+  }
+
+  async function applyHistory(action: HistoryAction, direction: 'undo' | 'redo') {
+    if (action.kind === 'entry') {
+      const target = direction === 'undo' ? action.before : action.after;
+      if (target) {
+        await persistEntry(target);
+      } else {
+        const existing = direction === 'undo' ? action.after : action.before;
+        if (existing) {
+          await persistEntry({
+            ...existing,
+            deletedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      }
+      return;
+    }
+
+    const target = direction === 'undo' ? action.before : action.after;
+    if (target) {
+      await persistReflection(target);
+    } else {
+      await removeReflection(action.date);
+    }
+  }
+
+  async function undo() {
+    const action = undoStack.at(-1);
+    if (!action || historyBusy) return;
+    setHistoryBusy(true);
+    await applyHistory(action, 'undo');
+    setUndoStack((current) => current.slice(0, -1));
+    setRedoStack((current) => [...current, action].slice(-30));
+    setHistoryBusy(false);
+    notify(`${action.label} undone.`);
+  }
+
+  async function redo() {
+    const action = redoStack.at(-1);
+    if (!action || historyBusy) return;
+    setHistoryBusy(true);
+    await applyHistory(action, 'redo');
+    setRedoStack((current) => current.slice(0, -1));
+    setUndoStack((current) => [...current, action].slice(-30));
+    setHistoryBusy(false);
+    notify(`${action.label} redone.`);
+  }
+
+  undoRef.current = undo;
+  redoRef.current = redo;
+
   async function saveSelectedReflection(fields: {
     biggestWin: string;
     tomorrowFocus: string;
@@ -762,7 +912,8 @@ export default function Home() {
     wakeMinute: number | null;
     sleepMinute: number | null;
   }) {
-    await persistReflection({
+    const before = selectedReflection ? { ...selectedReflection } : null;
+    const after = {
       biggestWin: '',
       tomorrowFocus: '',
       ...selectedReflection,
@@ -770,7 +921,21 @@ export default function Home() {
       wakeMinute: fields.wakeMinute,
       sleepMinute: fields.sleepMinute,
       updatedAt: new Date().toISOString(),
-    });
+    };
+    await persistReflection(after);
+    if (
+      before?.wakeMinute !== after.wakeMinute ||
+      before?.sleepMinute !== after.sleepMinute
+    ) {
+      recordHistory({
+        id: makeId(),
+        label: 'Day markers',
+        kind: 'markers',
+        date: after.date,
+        before,
+        after,
+      });
+    }
   }
 
   async function setMarkerFromEntry(kind: DayMarkerKind) {
@@ -838,6 +1003,7 @@ export default function Home() {
     }
 
     const timestamp = new Date().toISOString();
+    const previousEntry = editingEntry ? { ...editingEntry } : null;
     const id = editingEntry?.id ?? makeId();
     const details = entryDetails.trim();
     const entry: TimelineEntry = {
@@ -854,6 +1020,13 @@ export default function Home() {
     };
 
     await persistEntry(entry);
+    recordHistory({
+      id: makeId(),
+      label: previousEntry ? 'Entry edit' : 'Entry',
+      kind: 'entry',
+      before: previousEntry,
+      after: entry,
+    });
     setSelectedDuration(range.endMinute - range.startMinute);
     window.localStorage.setItem(
       DURATION_STORAGE_KEY,
@@ -875,24 +1048,19 @@ export default function Home() {
 
   async function deleteEditingEntry() {
     if (!editingEntry) return;
-    if (user && services) {
-      const deletedEntry = {
-        ...editingEntry,
-        deletedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setCloudEntries((current) => mergeEntry(current, deletedEntry));
-      await setDoc(
-        doc(services.db, 'users', user.uid, 'entries', editingEntry.id),
-        deletedEntry,
-      );
-    } else {
-      setGuestEntries((current) => {
-        const next = current.filter((entry) => entry.id !== editingEntry.id);
-        saveGuestEntries(next);
-        return next;
-      });
-    }
+    const previousEntry = { ...editingEntry };
+    await persistEntry({
+      ...editingEntry,
+      deletedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    recordHistory({
+      id: makeId(),
+      label: 'Entry deletion',
+      kind: 'entry',
+      before: previousEntry,
+      after: null,
+    });
     setEntryOpen(false);
     setEditingEntry(null);
     setEntryTitle('');
@@ -904,7 +1072,7 @@ export default function Home() {
     if (!editingEntry) return;
     const timestamp = new Date().toISOString();
     const id = makeId();
-    await persistEntry({
+    const duplicate = {
       ...editingEntry,
       id,
       title: `${editingEntry.title} (copy)`,
@@ -912,6 +1080,14 @@ export default function Home() {
       createdAt: timestamp,
       updatedAt: timestamp,
       deletedAt: null,
+    };
+    await persistEntry(duplicate);
+    recordHistory({
+      id: makeId(),
+      label: 'Entry copy',
+      kind: 'entry',
+      before: null,
+      after: duplicate,
     });
     setEntryOpen(false);
     setEntryTitle('');
@@ -1178,6 +1354,44 @@ export default function Home() {
           />
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="size-10 border-2 border-ink p-0 font-bold"
+              onClick={() => void undo()}
+              disabled={!undoStack.length || historyBusy}
+              aria-label={
+                undoStack.length
+                  ? `Undo ${undoStack.at(-1)?.label.toLowerCase()}`
+                  : 'Nothing to undo'
+              }
+              title={
+                undoStack.length
+                  ? `Undo ${undoStack.at(-1)?.label} (⌘/Ctrl Z)`
+                  : 'Nothing to undo'
+              }
+            >
+              <Undo2 />
+              <span className="sr-only">Undo</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="size-10 border-2 border-ink p-0 font-bold"
+              onClick={() => void redo()}
+              disabled={!redoStack.length || historyBusy}
+              aria-label={
+                redoStack.length
+                  ? `Redo ${redoStack.at(-1)?.label.toLowerCase()}`
+                  : 'Nothing to redo'
+              }
+              title={
+                redoStack.length
+                  ? `Redo ${redoStack.at(-1)?.label} (⌘/Ctrl Shift Z)`
+                  : 'Nothing to redo'
+              }
+            >
+              <Redo2 />
+              <span className="sr-only">Redo</span>
+            </Button>
             <Button
               variant="outline"
               className="size-10 border-2 border-ink p-0 font-bold sm:h-10 sm:w-auto sm:px-3"
