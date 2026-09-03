@@ -203,12 +203,29 @@ export default function Home() {
   const isToday = selectedDate === today;
 
   useEffect(() => {
-    setSelectedDate(dateKey());
+    const openedOn = dateKey();
+    let reloadingForNewDay = false;
+
+    const refreshClockAndDay = () => {
+      const currentDay = dateKey();
+      if (!reloadingForNewDay && currentDay !== openedOn) {
+        reloadingForNewDay = true;
+        window.location.reload();
+        return;
+      }
+      setClockMinute(minutesNow());
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') refreshClockAndDay();
+    };
+
+    setSelectedDate(openedOn);
     setGuestEntries(loadGuestEntries());
     setGuestLoaded(true);
     setIsOnline(navigator.onLine);
-    setClockMinute(minutesNow());
-    const clock = setInterval(() => setClockMinute(minutesNow()), 30_000);
+    refreshClockAndDay();
+    const clock = setInterval(refreshClockAndDay, 30_000);
     const rememberedDuration = Number(
       window.localStorage.getItem(DURATION_STORAGE_KEY),
     );
@@ -223,9 +240,15 @@ export default function Home() {
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    window.addEventListener('focus', refreshClockAndDay);
+    window.addEventListener('pageshow', refreshClockAndDay);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('focus', refreshClockAndDay);
+      window.removeEventListener('pageshow', refreshClockAndDay);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       clearInterval(clock);
     };
   }, []);
