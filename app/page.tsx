@@ -28,8 +28,10 @@ import {
   FileText,
   LoaderCircle,
   LogOut,
+  Moon,
   Plus,
   Sparkles,
+  Sunrise,
   Target,
   Trash2,
   Trophy,
@@ -153,6 +155,7 @@ export default function Home() {
   );
   const [reviewOpen, setReviewOpen] = useState(false);
   const [weeklyReviewOpen, setWeeklyReviewOpen] = useState(false);
+  const [dayMarkersOpen, setDayMarkersOpen] = useState(false);
 
   const [accountOpen, setAccountOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -599,9 +602,25 @@ export default function Home() {
     tomorrowFocus: string;
   }) {
     await persistReflection({
+      ...selectedReflection,
       date: selectedDate || today,
       biggestWin: fields.biggestWin.trim(),
       tomorrowFocus: fields.tomorrowFocus.trim(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  async function saveSelectedMarkers(fields: {
+    wakeMinute: number | null;
+    sleepMinute: number | null;
+  }) {
+    await persistReflection({
+      biggestWin: '',
+      tomorrowFocus: '',
+      ...selectedReflection,
+      date: selectedDate || today,
+      wakeMinute: fields.wakeMinute,
+      sleepMinute: fields.sleepMinute,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -1044,7 +1063,7 @@ export default function Home() {
                   Tap any time to add a precise entry
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="timeline-actions flex gap-1 sm:gap-2">
                 <Button
                   variant="outline"
                   className="h-9 border-2 border-ink bg-sun font-bold"
@@ -1062,6 +1081,15 @@ export default function Home() {
                   <CalendarRange />
                   <span className="hidden sm:inline">Weekly review</span>
                   <span className="sm:hidden">Week</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-9 border-2 border-ink font-bold"
+                  onClick={() => setDayMarkersOpen(true)}
+                >
+                  <Sunrise />
+                  <span className="hidden sm:inline">Day markers</span>
+                  <span className="sm:hidden">Day</span>
                 </Button>
                 <Button
                   variant="outline"
@@ -1103,6 +1131,64 @@ export default function Home() {
                 >
                   <span>NOW</span>
                 </div>
+              )}
+
+              {typeof selectedReflection?.wakeMinute === 'number' &&
+                typeof selectedReflection?.sleepMinute === 'number' &&
+                selectedReflection.sleepMinute >
+                  selectedReflection.wakeMinute && (
+                  <div
+                    className="awake-window"
+                    style={{
+                      top:
+                        (selectedReflection.wakeMinute / 60) *
+                        TIMELINE_ROW_HEIGHT,
+                      height:
+                        ((Math.min(selectedReflection.sleepMinute, 24 * 60) -
+                          selectedReflection.wakeMinute) /
+                          60) *
+                        TIMELINE_ROW_HEIGHT,
+                    }}
+                    aria-hidden="true"
+                  />
+                )}
+
+              {typeof selectedReflection?.wakeMinute === 'number' && (
+                <button
+                  type="button"
+                  className="day-boundary day-boundary--wake"
+                  style={{
+                    top:
+                      (selectedReflection.wakeMinute / 60) *
+                      TIMELINE_ROW_HEIGHT,
+                  }}
+                  onClick={() => setDayMarkersOpen(true)}
+                  aria-label={`Woke up at ${formatBoundaryTime(selectedReflection.wakeMinute)}`}
+                >
+                  <span>
+                    <Sunrise /> Woke{' '}
+                    {formatBoundaryTime(selectedReflection.wakeMinute)}
+                  </span>
+                </button>
+              )}
+
+              {typeof selectedReflection?.sleepMinute === 'number' && (
+                <button
+                  type="button"
+                  className="day-boundary day-boundary--sleep"
+                  style={{
+                    top:
+                      (Math.min(selectedReflection.sleepMinute, 24 * 60) / 60) *
+                      TIMELINE_ROW_HEIGHT,
+                  }}
+                  onClick={() => setDayMarkersOpen(true)}
+                  aria-label={`Went to sleep at ${formatBoundaryTime(selectedReflection.sleepMinute)}`}
+                >
+                  <span>
+                    <Moon /> Sleep{' '}
+                    {formatBoundaryTime(selectedReflection.sleepMinute)}
+                  </span>
+                </button>
               )}
 
               <div className="timeline-entries" aria-live="polite">
@@ -1314,6 +1400,15 @@ export default function Home() {
         today={today}
         entries={activeEntries.filter((entry) => !entry.deletedAt)}
         reflections={activeReflections}
+      />
+
+      <DayMarkersDialog
+        open={dayMarkersOpen}
+        onOpenChange={setDayMarkersOpen}
+        date={selectedDate || today}
+        isToday={isToday}
+        reflection={selectedReflection}
+        onSave={saveSelectedMarkers}
       />
 
       <AccountDialog
@@ -1768,6 +1863,237 @@ function DayReviewDialog({
   );
 }
 
+type DayMarkersDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  date: string;
+  isToday: boolean;
+  reflection: DailyReflection | null;
+  onSave: (fields: {
+    wakeMinute: number | null;
+    sleepMinute: number | null;
+  }) => Promise<void>;
+};
+
+function DayMarkersDialog({
+  open,
+  onOpenChange,
+  date,
+  isToday,
+  reflection,
+  onSave,
+}: DayMarkersDialogProps) {
+  const [wakeTime, setWakeTime] = useState('');
+  const [sleepTime, setSleepTime] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>(
+    'saved',
+  );
+  const savedMarkers = useRef<{
+    wakeMinute: number | null;
+    sleepMinute: number | null;
+  }>({ wakeMinute: null, sleepMinute: null });
+
+  useEffect(() => {
+    if (!open) return;
+    const next = {
+      wakeMinute:
+        typeof reflection?.wakeMinute === 'number'
+          ? reflection.wakeMinute
+          : null,
+      sleepMinute:
+        typeof reflection?.sleepMinute === 'number'
+          ? reflection.sleepMinute
+          : null,
+    };
+    savedMarkers.current = next;
+    setWakeTime(
+      next.wakeMinute == null ? '' : minuteToInput(next.wakeMinute % (24 * 60)),
+    );
+    setSleepTime(
+      next.sleepMinute == null
+        ? ''
+        : minuteToInput(next.sleepMinute % (24 * 60)),
+    );
+    setSaveStatus('saved');
+  }, [
+    date,
+    open,
+    reflection?.sleepMinute,
+    reflection?.updatedAt,
+    reflection?.wakeMinute,
+  ]);
+
+  function currentValues(nextWake = wakeTime, nextSleep = sleepTime) {
+    const wakeMinute = nextWake ? inputToMinute(nextWake) : null;
+    const rawSleepMinute = nextSleep ? inputToMinute(nextSleep) : null;
+    const sleepMinute =
+      wakeMinute != null &&
+      rawSleepMinute != null &&
+      rawSleepMinute <= wakeMinute
+        ? rawSleepMinute + 24 * 60
+        : rawSleepMinute;
+    return { wakeMinute, sleepMinute };
+  }
+
+  async function saveMarkers(nextWake = wakeTime, nextSleep = sleepTime) {
+    const next = currentValues(nextWake, nextSleep);
+    if (
+      next.wakeMinute === savedMarkers.current.wakeMinute &&
+      next.sleepMinute === savedMarkers.current.sleepMinute
+    ) {
+      return;
+    }
+    savedMarkers.current = next;
+    setSaveStatus('saving');
+    await onSave(next);
+    setSaveStatus('saved');
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) void saveMarkers();
+    onOpenChange(nextOpen);
+  }
+
+  async function applyCurrentTime(kind: 'wake' | 'sleep') {
+    const time = minuteToInput(minutesNow());
+    const nextWake = kind === 'wake' ? time : wakeTime;
+    const nextSleep = kind === 'sleep' ? time : sleepTime;
+    setWakeTime(nextWake);
+    setSleepTime(nextSleep);
+    setSaveStatus('unsaved');
+    await saveMarkers(nextWake, nextSleep);
+  }
+
+  async function clearMarker(kind: 'wake' | 'sleep') {
+    const nextWake = kind === 'wake' ? '' : wakeTime;
+    const nextSleep = kind === 'sleep' ? '' : sleepTime;
+    setWakeTime(nextWake);
+    setSleepTime(nextSleep);
+    setSaveStatus('unsaved');
+    await saveMarkers(nextWake, nextSleep);
+  }
+
+  const resolvedValues = currentValues();
+  const dayLength =
+    resolvedValues.wakeMinute != null &&
+    resolvedValues.sleepMinute != null &&
+    resolvedValues.sleepMinute > resolvedValues.wakeMinute
+      ? resolvedValues.sleepMinute - resolvedValues.wakeMinute
+      : null;
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogContent
+        mobileSheet
+        className="day-markers-dialog rounded-none border-2 border-ink p-0 shadow-[7px_7px_0_#111] sm:max-w-[500px]"
+      >
+        <DialogHeader className="border-b-2 border-ink bg-sun p-5 pr-14">
+          <DialogTitle className="text-2xl font-black tracking-[-0.04em]">
+            Day markers
+          </DialogTitle>
+          <DialogDescription className="font-semibold text-ink/75">
+            Mark when {isToday ? 'today' : formatDay(date)} began and ended.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="day-markers-status">
+          <span>
+            {saveStatus === 'saving'
+              ? 'Saving…'
+              : saveStatus === 'unsaved'
+                ? 'Saves when you leave the field'
+                : 'Saved automatically'}
+          </span>
+          {dayLength != null && (
+            <strong>{formatDuration(dayLength)} awake</strong>
+          )}
+        </div>
+
+        <div className="day-marker-fields">
+          <section className="day-marker-field day-marker-field--wake">
+            <div>
+              <span className="day-marker-icon">
+                <Sunrise />
+              </span>
+              <div>
+                <strong>Woke up</strong>
+                <small>Start of your day</small>
+              </div>
+            </div>
+            <Input
+              type="time"
+              value={wakeTime}
+              onChange={(event) => {
+                setWakeTime(event.target.value);
+                setSaveStatus('unsaved');
+              }}
+              onBlur={() => void saveMarkers()}
+              aria-label="Wake time"
+            />
+            <div className="day-marker-actions">
+              {isToday && (
+                <button
+                  type="button"
+                  onClick={() => void applyCurrentTime('wake')}
+                >
+                  Use now
+                </button>
+              )}
+              {wakeTime && (
+                <button type="button" onClick={() => void clearMarker('wake')}>
+                  Clear
+                </button>
+              )}
+            </div>
+          </section>
+
+          <section className="day-marker-field day-marker-field--sleep">
+            <div>
+              <span className="day-marker-icon">
+                <Moon />
+              </span>
+              <div>
+                <strong>Went to sleep</strong>
+                <small>End of your day</small>
+              </div>
+            </div>
+            <Input
+              type="time"
+              value={sleepTime}
+              onChange={(event) => {
+                setSleepTime(event.target.value);
+                setSaveStatus('unsaved');
+              }}
+              onBlur={() => void saveMarkers()}
+              aria-label="Sleep time"
+            />
+            <div className="day-marker-actions">
+              {isToday && (
+                <button
+                  type="button"
+                  onClick={() => void applyCurrentTime('sleep')}
+                >
+                  Use now
+                </button>
+              )}
+              {sleepTime && (
+                <button type="button" onClick={() => void clearMarker('sleep')}>
+                  Clear
+                </button>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <p className="day-markers-note">
+          If your sleep time is earlier than your wake time, Daymark treats it
+          as after midnight on the following day.
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 type WeeklyReviewDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1929,6 +2255,35 @@ function WeeklyReviewDialog({
                   {day.entries.length === 1 ? 'entry' : 'entries'}
                 </small>
               </header>
+
+              {(typeof day.reflection?.wakeMinute === 'number' ||
+                typeof day.reflection?.sleepMinute === 'number') && (
+                <div className="weekly-day__bounds">
+                  {typeof day.reflection?.wakeMinute === 'number' && (
+                    <span>
+                      <Sunrise />
+                      {formatBoundaryTime(day.reflection.wakeMinute)}
+                    </span>
+                  )}
+                  {typeof day.reflection?.sleepMinute === 'number' && (
+                    <span>
+                      <Moon />
+                      {formatBoundaryTime(day.reflection.sleepMinute)}
+                    </span>
+                  )}
+                  {typeof day.reflection?.wakeMinute === 'number' &&
+                    typeof day.reflection?.sleepMinute === 'number' &&
+                    day.reflection.sleepMinute > day.reflection.wakeMinute && (
+                      <strong>
+                        {formatDuration(
+                          day.reflection.sleepMinute -
+                            day.reflection.wakeMinute,
+                        )}{' '}
+                        awake
+                      </strong>
+                    )}
+                </div>
+              )}
 
               {day.entries.length ? (
                 <ol>
@@ -2523,8 +2878,18 @@ function hasReflectionContent(
   reflection: DailyReflection | null | undefined,
 ): reflection is DailyReflection {
   return Boolean(
-    reflection && (reflection.biggestWin || reflection.tomorrowFocus),
+    reflection &&
+    (reflection.biggestWin ||
+      reflection.tomorrowFocus ||
+      typeof reflection.wakeMinute === 'number' ||
+      typeof reflection.sleepMinute === 'number'),
   );
+}
+
+function formatBoundaryTime(minute: number) {
+  const nextDay = minute >= 24 * 60;
+  const clockMinute = minute % (24 * 60);
+  return `${formatTime(clockMinute)}${nextDay ? ' next day' : ''}`;
 }
 
 function startOfWeekKey(key: string) {

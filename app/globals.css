@@ -434,6 +434,59 @@
   font-weight: 900;
 }
 
+.awake-window {
+  position: absolute;
+  z-index: 0;
+  left: 55px;
+  right: 0;
+  border-left: 3px solid color-mix(in srgb, var(--sun) 70%, white);
+  background: color-mix(in srgb, var(--sun) 7%, transparent);
+  pointer-events: none;
+}
+
+.day-boundary {
+  position: absolute;
+  z-index: 9;
+  left: 55px;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--green);
+  color: var(--ink);
+  text-align: right;
+}
+
+.day-boundary > span {
+  position: absolute;
+  top: -13px;
+  right: 9px;
+  display: inline-flex;
+  height: 25px;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1.5px solid var(--ink);
+  background: #bff3d7;
+  padding: 0 0.45rem;
+  font-family: var(--font-geist-mono);
+  font-size: 0.6rem;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.day-boundary svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.day-boundary--sleep {
+  border-color: var(--blue);
+}
+
+.day-boundary--sleep > span {
+  background: var(--blue);
+  color: #fff;
+}
+
 .empty-timeline {
   position: absolute;
   z-index: 12;
@@ -923,6 +976,134 @@
   line-height: 1.45;
 }
 
+.day-markers-status {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 2px solid var(--ink);
+  background: #fff;
+  padding: 0.55rem 1.1rem;
+  color: var(--muted-foreground);
+  font-size: 0.65rem;
+  font-weight: 800;
+}
+
+.day-markers-status strong {
+  border: 1.5px solid var(--ink);
+  background: #fff;
+  padding: 0.2rem 0.45rem;
+  color: var(--ink);
+  font-family: var(--font-geist-mono);
+  font-size: 0.65rem;
+}
+
+.day-marker-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.day-marker-field {
+  min-width: 0;
+  border: 2px solid var(--ink);
+  background: #f2fff8;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.day-marker-field--sleep {
+  background: #edf3ff;
+}
+
+.day-marker-field > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  border-bottom: 1.5px solid var(--ink);
+  padding: 0.7rem;
+}
+
+.day-marker-icon {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1.5px solid var(--ink);
+  background: #bff3d7;
+}
+
+.day-marker-field--sleep .day-marker-icon {
+  background: var(--blue);
+  color: #fff;
+}
+
+.day-marker-icon svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.day-marker-field strong,
+.day-marker-field small {
+  display: block;
+}
+
+.day-marker-field strong {
+  font-size: 0.82rem;
+  font-weight: 950;
+}
+
+.day-marker-field small {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.day-marker-field > input {
+  width: calc(100% - 1.4rem);
+  height: 48px;
+  margin: 0.7rem;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: #fff;
+  font-family: var(--font-geist-mono);
+  font-size: 1rem;
+  font-weight: 900;
+}
+
+.day-marker-actions {
+  display: flex;
+  min-height: 36px;
+  justify-content: flex-end;
+  gap: 0.8rem;
+  border-top: 1.5px solid var(--ink);
+  padding: 0.45rem 0.7rem;
+}
+
+.day-marker-actions:empty {
+  display: none;
+}
+
+.day-marker-actions button {
+  font-size: 0.65rem;
+  font-weight: 950;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.day-markers-note {
+  border-top: 2px solid var(--ink);
+  background: var(--muted);
+  padding: 0.7rem 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .weekly-review-dialog {
   max-height: min(90dvh, 860px);
   overflow: hidden;
@@ -1077,6 +1258,36 @@
   color: var(--muted-foreground);
   font-size: 0.72rem;
   font-weight: 650;
+}
+
+.weekly-day__bounds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+  border-bottom: 1px solid #ddd9d0;
+  background: #faf9f5;
+  padding: 0.45rem 1rem;
+  font-family: var(--font-geist-mono);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.weekly-day__bounds span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.weekly-day__bounds svg {
+  width: 0.8rem;
+  height: 0.8rem;
+}
+
+.weekly-day__bounds strong {
+  margin-left: auto;
+  font-size: 0.62rem;
+  font-weight: 950;
 }
 
 .weekly-day__reflection {
@@ -1310,6 +1521,10 @@
 }
 
 @media (max-width: 639px) {
+  .timeline-actions button {
+    padding-inline: 0.45rem;
+  }
+
   .date-picker {
     min-width: 0;
     border: 0;
@@ -1392,6 +1607,11 @@
     left: 44px;
   }
 
+  .awake-window,
+  .day-boundary {
+    left: 44px;
+  }
+
   .quick-dialog {
     inset: auto 0 0 !important;
     width: 100dvw !important;
@@ -1462,6 +1682,23 @@
     translate: none !important;
     transform: none !important;
     border-bottom: 0;
+  }
+
+  .day-markers-dialog {
+    inset: auto 0 0 !important;
+    width: 100dvw !important;
+    max-width: none !important;
+    max-height: 92dvh;
+    overflow-y: auto;
+    margin: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom);
+    translate: none !important;
+    transform: none !important;
+    border-bottom: 0;
+  }
+
+  .day-marker-fields {
+    grid-template-columns: 1fr;
   }
 
   .weekly-day li {

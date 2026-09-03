@@ -17,6 +17,8 @@ export type DailyReflection = {
   date: string;
   biggestWin: string;
   tomorrowFocus: string;
+  wakeMinute?: number | null;
+  sleepMinute?: number | null;
   updatedAt: string;
 };
 
@@ -352,6 +354,10 @@ export function reflectionFromCloudRecord(
     date: record.date,
     biggestWin: record.biggestWin,
     tomorrowFocus: record.tomorrowFocus,
+    wakeMinute:
+      typeof record.wakeMinute === 'number' ? record.wakeMinute : null,
+    sleepMinute:
+      typeof record.sleepMinute === 'number' ? record.sleepMinute : null,
     updatedAt: record.updatedAt,
   };
 }
