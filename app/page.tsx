@@ -19,6 +19,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  CircleHelp,
   CircleUserRound,
   Clock3,
   Cloud,
@@ -163,6 +164,7 @@ export default function Home() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [weeklyReviewOpen, setWeeklyReviewOpen] = useState(false);
   const [dayMarkersOpen, setDayMarkersOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [hoverMinute, setHoverMinute] = useState<number | null>(null);
   const [dragRange, setDragRange] = useState<{
     startMinute: number;
@@ -1118,20 +1120,37 @@ export default function Home() {
             className="hidden md:flex"
           />
 
-          <Button
-            variant="outline"
-            className="h-10 border-2 border-ink px-3 font-bold"
-            onClick={() => setAccountOpen(true)}
-          >
-            {authChecking ? (
-              <LoaderCircle className="animate-spin" />
-            ) : (
-              <CircleUserRound />
-            )}
-            <span className="hidden sm:inline">
-              {user ? firstNameOrEmail(user) : 'Guest'}
-            </span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              className="size-10 border-2 border-ink p-0 font-bold sm:h-10 sm:w-auto sm:px-3"
+              onClick={() => setHelpOpen(true)}
+              aria-label="Open help"
+              title="Help"
+            >
+              <CircleHelp />
+              <span className="hidden sm:inline">Help</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="size-10 border-2 border-ink p-0 font-bold sm:h-10 sm:w-auto sm:px-3"
+              onClick={() => setAccountOpen(true)}
+              aria-label={
+                user
+                  ? `Open account for ${firstNameOrEmail(user)}`
+                  : 'Open account'
+              }
+            >
+              {authChecking ? (
+                <LoaderCircle className="animate-spin" />
+              ) : (
+                <CircleUserRound />
+              )}
+              <span className="hidden sm:inline">
+                {user ? firstNameOrEmail(user) : 'Guest'}
+              </span>
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -1599,6 +1618,8 @@ export default function Home() {
         onSave={saveSelectedMarkers}
       />
 
+      <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
+
       <AccountDialog
         open={accountOpen}
         onOpenChange={setAccountOpen}
@@ -1884,6 +1905,131 @@ type DayReviewDialogProps = {
     tomorrowFocus: string;
   }) => Promise<void>;
 };
+
+function HelpDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        mobileSheet
+        className="help-dialog rounded-none border-2 border-ink p-0 shadow-[7px_7px_0_#111] sm:max-w-[650px]"
+      >
+        <DialogHeader className="border-b-2 border-ink bg-sun p-5 pr-14">
+          <DialogTitle className="text-2xl font-black tracking-[-0.04em]">
+            How Daymark works
+          </DialogTitle>
+          <DialogDescription className="font-semibold text-ink/75">
+            Record what happened, fill the gaps, and look back on your day.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="help-body">
+          <ol className="help-steps" aria-label="Daymark quick start">
+            <li>
+              <span>1</span>
+              <div>
+                <strong>Log what you just finished</strong>
+                <p>
+                  Choose Quick add, pick a duration, and write the
+                  accomplishment. You can also type phrases like “Read for 25m”
+                  or “Lunch 12:30–1pm.”
+                </p>
+              </div>
+            </li>
+            <li>
+              <span>2</span>
+              <div>
+                <strong>Fill in the timeline</strong>
+                <p>
+                  Tap or click a blank time to create a precise entry. On a
+                  desktop, the guide snaps to five-minute marks and you can drag
+                  across blank space to select a time range.
+                </p>
+              </div>
+            </li>
+            <li>
+              <span>3</span>
+              <div>
+                <strong>Review the day</strong>
+                <p>
+                  Open Day in review for a reading-friendly list and reflection,
+                  or Weekly review to see your progress across the week.
+                </p>
+              </div>
+            </li>
+          </ol>
+
+          <div className="help-grid">
+            <section>
+              <div className="help-section-title">
+                <Sunrise />
+                <h3>Start and end the day</h3>
+              </div>
+              <p>
+                Day markers record when you woke up and went to sleep, so the
+                timeline reflects the day you actually lived.
+              </p>
+            </section>
+            <section>
+              <div className="help-section-title">
+                <CalendarDays />
+                <h3>Move between dates</h3>
+              </div>
+              <p>
+                Use the arrows or tap the date to open the calendar. The Daymark
+                logo reloads the app whenever you need a fresh start.
+              </p>
+            </section>
+            <section>
+              <div className="help-section-title">
+                <Cloud />
+                <h3>Sync and back up</h3>
+              </div>
+              <p>
+                Guest entries stay on this device. Sign in to keep your phone
+                and desktop in sync. Export and import backups from Account.
+              </p>
+            </section>
+            <section>
+              <div className="help-section-title">
+                <BookOpenText />
+                <h3>Edit an entry</h3>
+              </div>
+              <p>
+                Select an accomplishment to edit, duplicate, or delete it. On
+                mobile, the first tap brings an overlapped entry forward; tap it
+                again to edit.
+              </p>
+            </section>
+          </div>
+
+          <div className="help-note">
+            <Clock3 />
+            <p>
+              <strong>On mobile:</strong> drag-to-select is turned off so normal
+              scrolling stays easy. Tap a time or use Quick add instead.
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter className="border-t-2 border-ink bg-white p-4">
+          <Button
+            type="button"
+            className="h-11 rounded-none border-2 border-ink bg-primary px-7 font-black text-white shadow-[3px_3px_0_#111] hover:bg-primary/90"
+            onClick={() => onOpenChange(false)}
+          >
+            Got it
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function DayReviewDialog({
   open,
