@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  type CSSProperties,
   type ChangeEvent,
   type MouseEvent,
   type SyntheticEvent,
@@ -100,6 +101,7 @@ type SyncStatus = 'local' | 'saved' | 'syncing' | 'offline' | 'error';
 const hours = Array.from({ length: 24 }, (_, index) => index);
 const SHORT_ENTRY_THRESHOLD = 30;
 const SHORT_ENTRY_MIN_HEIGHT = 15;
+const ENTRY_TEXT_MIN_HEIGHT = 24;
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState('');
@@ -124,6 +126,9 @@ export default function Home() {
   const [entryError, setEntryError] = useState('');
   const [flashId, setFlashId] = useState<string | null>(null);
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+  const [overflowingEntryIds, setOverflowingEntryIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [reviewOpen, setReviewOpen] = useState(false);
 
   const [accountOpen, setAccountOpen] = useState(false);
@@ -137,6 +142,7 @@ export default function Home() {
 
   const nowMarkerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const timelineEntryRefs = useRef(new Map<string, HTMLButtonElement>());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const today = dateKey();
@@ -148,6 +154,52 @@ export default function Home() {
         .sort((a, b) => a.startMinute - b.startMinute),
     [activeEntries, selectedDate],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    let frame = 0;
+
+    const measureEntries = () => {
+      if (cancelled) return;
+
+      const next = new Set<string>();
+      selectedEntries.forEach((entry) => {
+        const element = timelineEntryRefs.current.get(entry.id);
+        const summary = element?.querySelector<HTMLElement>(
+          '.timeline-entry-summary',
+        );
+
+        if (summary && summary.scrollWidth > summary.clientWidth + 1) {
+          next.add(entry.id);
+        }
+      });
+
+      setOverflowingEntryIds((current) => {
+        if (
+          current.size === next.size &&
+          [...current].every((id) => next.has(id))
+        ) {
+          return current;
+        }
+        return next;
+      });
+    };
+
+    const scheduleMeasurement = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measureEntries);
+    };
+
+    scheduleMeasurement();
+    window.addEventListener('resize', scheduleMeasurement);
+    void document.fonts?.ready.then(scheduleMeasurement);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', scheduleMeasurement);
+    };
+  }, [selectedEntries]);
   const isToday = selectedDate === today;
 
   useEffect(() => {
@@ -812,34 +864,48 @@ export default function Home() {
                     ((entry.endMinute - entry.startMinute) / 60) *
                     TIMELINE_ROW_HEIGHT;
                   const isShort = durationHeight < SHORT_ENTRY_THRESHOLD;
+                  const renderedHeight = isShort
+                    ? Math.max(SHORT_ENTRY_MIN_HEIGHT, durationHeight)
+                    : durationHeight;
+                  const hidesText = renderedHeight < ENTRY_TEXT_MIN_HEIGHT;
+                  const needsExpansion =
+                    hidesText || overflowingEntryIds.has(entry.id);
                   const isExpanded = expandedEntryId === entry.id;
                   const entrySummary = `${formatTime(entry.startMinute)} - ${formatTime(entry.endMinute)} - ${entry.title}`;
 
                   return (
                     <button
                       key={entry.id}
+                      ref={(element) => {
+                        if (element) {
+                          timelineEntryRefs.current.set(entry.id, element);
+                        } else {
+                          timelineEntryRefs.current.delete(entry.id);
+                        }
+                      }}
                       className={cn(
                         'timeline-entry',
                         `timeline-entry--${entry.color}`,
                         isShort && 'timeline-entry--compact',
+                        hidesText && 'timeline-entry--text-hidden',
+                        needsExpansion && 'timeline-entry--needs-expansion',
                         isExpanded && 'timeline-entry--expanded',
                         flashId === entry.id && 'timeline-entry--flash',
                       )}
-                      style={{
-                        top: (entry.startMinute / 60) * TIMELINE_ROW_HEIGHT,
-                        height: isShort
-                          ? Math.max(SHORT_ENTRY_MIN_HEIGHT, durationHeight)
-                          : durationHeight,
-                      }}
+                      style={
+                        {
+                          top:
+                            (entry.startMinute / 60) * TIMELINE_ROW_HEIGHT,
+                          height: renderedHeight,
+                          '--entry-base-height': `${renderedHeight}px`,
+                        } as CSSProperties
+                      }
                       type="button"
                       onClick={() => handleEntryClick(entry)}
                       aria-expanded={isExpanded}
                       aria-label={`View or edit ${entry.title}, ${formatTime(entry.startMinute)} to ${formatTime(entry.endMinute)}`}
                     >
                       <span className="timeline-entry-summary">
-                        {entrySummary}
-                      </span>
-                      <span className="timeline-entry-detail" aria-hidden="true">
                         {entrySummary}
                       </span>
                     </button>
