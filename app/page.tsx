@@ -813,6 +813,7 @@ export default function Home() {
                     TIMELINE_ROW_HEIGHT;
                   const isShort = durationHeight < SHORT_ENTRY_THRESHOLD;
                   const isExpanded = expandedEntryId === entry.id;
+                  const entrySummary = `${formatTime(entry.startMinute)} - ${formatTime(entry.endMinute)} - ${entry.title}`;
 
                   return (
                     <button
@@ -836,8 +837,10 @@ export default function Home() {
                       aria-label={`View or edit ${entry.title}, ${formatTime(entry.startMinute)} to ${formatTime(entry.endMinute)}`}
                     >
                       <span className="timeline-entry-summary">
-                        {formatTime(entry.startMinute)} -{' '}
-                        {formatTime(entry.endMinute)} - {entry.title}
+                        {entrySummary}
+                      </span>
+                      <span className="timeline-entry-detail" aria-hidden="true">
+                        {entrySummary}
                       </span>
                     </button>
                   );
