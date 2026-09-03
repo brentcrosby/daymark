@@ -113,6 +113,7 @@ import {
 import { cn } from '@/lib/utils';
 
 type EditorMode = 'quick' | 'detail' | 'edit';
+type DayMarkerKind = 'wake' | 'sleep';
 type SyncStatus = 'local' | 'saved' | 'syncing' | 'offline' | 'error';
 type TimelineDrag = {
   pointerId: number;
@@ -432,6 +433,10 @@ export default function Home() {
             anchor: editorMode === 'quick' ? 'before' : 'after',
           }),
     [editorMode, editorRange, entryTitle],
+  );
+  const markerSuggestion = useMemo(
+    () => (editorMode === 'edit' ? null : dayMarkerIntent(entryTitle)),
+    [editorMode, entryTitle],
   );
 
   function notify(message: string, actionEntry: TimelineEntry | null = null) {
@@ -761,6 +766,48 @@ export default function Home() {
       sleepMinute: fields.sleepMinute,
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  async function setMarkerFromEntry(kind: DayMarkerKind) {
+    const rawMinute =
+      editorMode === 'quick' ? editorRange.endMinute : editorRange.startMinute;
+    if (!Number.isFinite(rawMinute)) {
+      setEntryError('Choose a valid time for the day marker.');
+      return;
+    }
+
+    const markerMinute = Math.max(0, Math.min(24 * 60 - 1, rawMinute));
+    let wakeMinute = selectedReflection?.wakeMinute ?? null;
+    let sleepMinute = selectedReflection?.sleepMinute ?? null;
+
+    if (kind === 'wake') {
+      wakeMinute = markerMinute;
+      if (
+        sleepMinute != null &&
+        sleepMinute < 24 * 60 &&
+        sleepMinute <= wakeMinute
+      ) {
+        sleepMinute += 24 * 60;
+      }
+    } else {
+      sleepMinute =
+        wakeMinute != null && markerMinute <= wakeMinute
+          ? markerMinute + 24 * 60
+          : markerMinute;
+    }
+
+    await saveSelectedMarkers({ wakeMinute, sleepMinute });
+    setEntryOpen(false);
+    setEntryTitle('');
+    setEntryDetails('');
+    setShowEntryDetails(false);
+    setFocusEntryDetails(false);
+    setEditingEntry(null);
+    notify(
+      kind === 'wake'
+        ? `Day start set to ${formatBoundaryTime(markerMinute)}.`
+        : `Sleep set to ${formatBoundaryTime(sleepMinute ?? markerMinute)}.`,
+    );
   }
 
   async function handleEntrySubmit(event: SyntheticEvent<HTMLFormElement>) {
@@ -1568,6 +1615,12 @@ export default function Home() {
         setShowDetails={setShowEntryDetails}
         focusDetails={focusEntryDetails}
         naturalDraft={naturalDraft}
+        markerSuggestion={markerSuggestion}
+        markerMinute={
+          editorMode === 'quick'
+            ? editorRange.endMinute
+            : editorRange.startMinute
+        }
         duration={Math.max(0, editorRange.endMinute - editorRange.startMinute)}
         setDuration={setEditorDuration}
         customDuration={customDuration}
@@ -1589,6 +1642,7 @@ export default function Home() {
         onSubmit={handleEntrySubmit}
         onDelete={deleteEditingEntry}
         onDuplicate={duplicateEditingEntry}
+        onSetMarker={setMarkerFromEntry}
       />
 
       <DayReviewDialog
@@ -1879,6 +1933,8 @@ type EntryDialogProps = {
   setShowDetails: (show: boolean) => void;
   focusDetails: boolean;
   naturalDraft: NaturalEntryDraft | null;
+  markerSuggestion: DayMarkerKind | null;
+  markerMinute: number;
   duration: number;
   setDuration: (duration: number) => void;
   customDuration: boolean;
@@ -1892,6 +1948,7 @@ type EntryDialogProps = {
   onSubmit: (event: SyntheticEvent<HTMLFormElement>) => void;
   onDelete: () => void;
   onDuplicate: () => void;
+  onSetMarker: (kind: DayMarkerKind) => Promise<void>;
 };
 
 type DayReviewDialogProps = {
@@ -1973,8 +2030,9 @@ function HelpDialog({
                 <h3>Start and end the day</h3>
               </div>
               <p>
-                Day markers record when you woke up and went to sleep, so the
-                timeline reflects the day you actually lived.
+                Open Day markers, or choose Day start or Sleep while adding from
+                the timeline. Typing “Woke up” or “Went to bed” also suggests
+                the matching marker.
               </p>
             </section>
             <section>
@@ -2740,23 +2798,53 @@ function EntryDialog(props: EntryDialogProps) {
             />
 
             {!isEdit && (
-              <div className="natural-entry-help">
-                {props.naturalDraft ? (
-                  <>
-                    <Sparkles />
+              <>
+                {props.markerSuggestion ? (
+                  <button
+                    type="button"
+                    className={cn(
+                      'marker-suggestion',
+                      `marker-suggestion--${props.markerSuggestion}`,
+                    )}
+                    onClick={() =>
+                      void props.onSetMarker(props.markerSuggestion!)
+                    }
+                  >
+                    {props.markerSuggestion === 'wake' ? <Sunrise /> : <Moon />}
                     <span>
-                      Understood: <strong>{props.naturalDraft.title}</strong>,{' '}
-                      {formatTime(props.naturalDraft.startMinute)}–
-                      {formatTime(props.naturalDraft.endMinute)}
+                      <small>Day marker suggested</small>
+                      <strong>
+                        {props.markerSuggestion === 'wake'
+                          ? 'Set day start'
+                          : 'Set sleep time'}{' '}
+                        · {formatTime(props.markerMinute)}
+                      </strong>
                     </span>
-                  </>
+                    <ChevronRight />
+                  </button>
                 ) : (
-                  <>
-                    <span className="natural-entry-help__example">Try</span>
-                    <span>“Read for 25m” or “Lunch 12:30–1pm”</span>
-                  </>
+                  <div className="natural-entry-help">
+                    {props.naturalDraft ? (
+                      <>
+                        <Sparkles />
+                        <span>
+                          Understood:{' '}
+                          <strong>{props.naturalDraft.title}</strong>,{' '}
+                          {formatTime(props.naturalDraft.startMinute)}–
+                          {formatTime(props.naturalDraft.endMinute)}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="natural-entry-help__example">Try</span>
+                        <span>
+                          “Read for 25m”, “Lunch 12:30–1pm”, or “Woke up”
+                        </span>
+                      </>
+                    )}
+                  </div>
                 )}
-              </div>
+              </>
             )}
 
             <section
@@ -2900,6 +2988,24 @@ function EntryDialog(props: EntryDialogProps) {
                 )}
               </strong>
             </div>
+
+            {!isEdit && (
+              <div className="entry-marker-actions">
+                <span>Use {formatTime(props.markerMinute)} as</span>
+                <button
+                  type="button"
+                  onClick={() => void props.onSetMarker('wake')}
+                >
+                  <Sunrise /> Day start
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void props.onSetMarker('sleep')}
+                >
+                  <Moon /> Sleep
+                </button>
+              </div>
+            )}
 
             <button
               type="button"
@@ -3226,6 +3332,29 @@ function formatBoundaryTime(minute: number) {
   const nextDay = minute >= 24 * 60;
   const clockMinute = minute % (24 * 60);
   return `${formatTime(clockMinute)}${nextDay ? ' next day' : ''}`;
+}
+
+function dayMarkerIntent(input: string): DayMarkerKind | null {
+  const value = input.trim().toLowerCase();
+  if (!value) return null;
+
+  if (
+    /\b(?:woke\s+up|wake\s+up|got\s+up|up\s+for\s+the\s+day|start(?:ed|ing)?\s+(?:my|the)\s+day|awake\s+for\s+the\s+day)\b/.test(
+      value,
+    )
+  ) {
+    return 'wake';
+  }
+
+  if (
+    /\b(?:went\s+to\s+(?:bed|sleep)|go(?:ing)?\s+to\s+(?:bed|sleep)|fell\s+asleep|bedtime|sleep\s+time|calling\s+it\s+a\s+night)\b/.test(
+      value,
+    )
+  ) {
+    return 'sleep';
+  }
+
+  return null;
 }
 
 function startOfWeekKey(key: string) {

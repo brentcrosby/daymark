@@ -836,6 +836,109 @@
   letter-spacing: 0.06em;
 }
 
+.marker-suggestion {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: -0.55rem;
+  border: 2px solid var(--ink);
+  background: #eefaf3;
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+}
+
+.marker-suggestion--sleep {
+  background: #edf3ff;
+}
+
+.marker-suggestion:hover,
+.marker-suggestion:focus-visible {
+  background: #dff5e9;
+}
+
+.marker-suggestion--sleep:hover,
+.marker-suggestion--sleep:focus-visible {
+  background: #dfe9ff;
+}
+
+.marker-suggestion > svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.marker-suggestion > svg:last-child {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.marker-suggestion span {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.marker-suggestion small {
+  color: var(--muted-foreground);
+  font-size: 0.58rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.marker-suggestion strong {
+  font-size: 0.76rem;
+  font-weight: 950;
+}
+
+.entry-marker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: -0.35rem;
+  border: 1px dashed #aaa69d;
+  background: color-mix(in srgb, var(--muted) 55%, white);
+  padding: 0.45rem;
+}
+
+.entry-marker-actions > span {
+  margin-right: auto;
+  padding-left: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 850;
+}
+
+.entry-marker-actions button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid var(--ink);
+  background: #fff;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.66rem;
+  font-weight: 900;
+}
+
+.entry-marker-actions button:hover,
+.entry-marker-actions button:focus-visible {
+  background: var(--sun);
+}
+
+.entry-marker-actions button:last-child:hover,
+.entry-marker-actions button:last-child:focus-visible {
+  background: #dfe9ff;
+}
+
+.entry-marker-actions svg {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
 .details-toggle {
   display: flex;
   width: 100%;
@@ -1948,6 +2051,10 @@
 @media (max-width: 380px) {
   .duration-steppers {
     grid-template-columns: 1fr;
+  }
+
+  .entry-marker-actions > span {
+    width: 100%;
   }
 }
 
