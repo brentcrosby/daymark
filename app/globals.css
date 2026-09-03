@@ -852,6 +852,272 @@
   font-weight: 600;
 }
 
+.day-reflection {
+  border-top: 2px solid var(--ink);
+  background: var(--muted);
+  padding: 1.1rem 1.25rem 1.25rem;
+}
+
+.day-reflection__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.day-reflection__heading p {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.day-reflection__heading h3 {
+  font-size: 1.05rem;
+  font-weight: 950;
+  letter-spacing: -0.025em;
+}
+
+.day-reflection__heading > span {
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-align: right;
+}
+
+.day-reflection__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.day-reflection__fields label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.day-reflection__fields label > span {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 950;
+}
+
+.day-reflection__fields label > span svg {
+  width: 0.9rem;
+  height: 0.9rem;
+}
+
+.day-reflection__fields textarea {
+  min-height: 90px;
+  resize: vertical;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: #fff;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.weekly-review-dialog {
+  max-height: min(90dvh, 860px);
+  overflow: hidden;
+}
+
+.weekly-review-nav {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 0.65rem;
+  border-bottom: 2px solid var(--ink);
+  background: #fff;
+  padding: 0.75rem 1rem;
+}
+
+.weekly-review-nav button {
+  width: 42px;
+  height: 38px;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+}
+
+.weekly-review-nav > strong {
+  overflow: hidden;
+  font-size: 0.82rem;
+  font-weight: 950;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weekly-review-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 2px solid var(--ink);
+  background: var(--sun);
+}
+
+.weekly-review-summary > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 0.75rem 1rem;
+}
+
+.weekly-review-summary > div + div {
+  border-left: 2px solid var(--ink);
+}
+
+.weekly-review-summary strong {
+  overflow: hidden;
+  font-size: 1.15rem;
+  font-weight: 950;
+  letter-spacing: -0.04em;
+  text-overflow: ellipsis;
+}
+
+.weekly-review-summary span {
+  font-size: 0.58rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.weekly-review-narrative {
+  border-bottom: 2px solid var(--ink);
+  background: #edf3ff;
+  padding: 0.8rem 1.1rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.weekly-review-days {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: #fff;
+}
+
+.weekly-day {
+  border-bottom: 2px solid var(--ink);
+}
+
+.weekly-day:last-child {
+  border-bottom: 0;
+}
+
+.weekly-day > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  background: var(--muted);
+  padding: 0.65rem 1rem;
+}
+
+.weekly-day--today > header {
+  background: var(--sun);
+}
+
+.weekly-day > header div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.weekly-day > header strong {
+  font-size: 0.85rem;
+  font-weight: 950;
+}
+
+.weekly-day > header span,
+.weekly-day > header small {
+  font-size: 0.62rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.weekly-day ol {
+  padding: 0.35rem 1rem 0.55rem;
+}
+
+.weekly-day li {
+  display: grid;
+  grid-template-columns: 125px minmax(0, 1fr);
+  gap: 0.75rem;
+  border-bottom: 1px solid #ddd9d0;
+  padding: 0.55rem 0;
+}
+
+.weekly-day li:last-child {
+  border-bottom: 0;
+}
+
+.weekly-day li time {
+  font-family: var(--font-geist-mono);
+  font-size: 0.62rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.weekly-day li span {
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.weekly-day__empty {
+  padding: 0.7rem 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.weekly-day__reflection {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  border-top: 1px solid var(--ink);
+  background: #fffdf4;
+  padding: 0.7rem 1rem;
+}
+
+.weekly-day__reflection > p {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+.weekly-day__reflection svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: 0 0 auto;
+  margin-top: 0.1rem;
+}
+
+.weekly-day__reflection span,
+.weekly-day__reflection strong {
+  display: block;
+}
+
+.weekly-day__reflection strong {
+  margin-bottom: 0.1rem;
+  font-size: 0.62rem;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
 .time-field,
 .auth-field {
   display: flex;
@@ -1164,7 +1430,7 @@
     width: 100dvw !important;
     max-width: none !important;
     max-height: 92dvh;
-    overflow: hidden;
+    overflow-y: auto;
     margin: 0 !important;
     padding-bottom: env(safe-area-inset-bottom);
     translate: none !important;
@@ -1175,6 +1441,32 @@
   .day-review-list {
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
+  }
+
+  .day-reflection__heading {
+    align-items: flex-start;
+  }
+
+  .day-reflection__fields,
+  .weekly-day__reflection {
+    grid-template-columns: 1fr;
+  }
+
+  .weekly-review-dialog {
+    inset: auto 0 0 !important;
+    width: 100dvw !important;
+    max-width: none !important;
+    max-height: 94dvh;
+    margin: 0 !important;
+    padding-bottom: env(safe-area-inset-bottom);
+    translate: none !important;
+    transform: none !important;
+    border-bottom: 0;
+  }
+
+  .weekly-day li {
+    grid-template-columns: 1fr;
+    gap: 0.15rem;
   }
 
   .day-review-item {

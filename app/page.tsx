@@ -13,6 +13,7 @@ import {
 import {
   ArrowDownToLine,
   BookOpenText,
+  CalendarRange,
   CalendarDays,
   Check,
   ChevronLeft,
@@ -29,7 +30,9 @@ import {
   LogOut,
   Plus,
   Sparkles,
+  Target,
   Trash2,
+  Trophy,
   WifiOff,
 } from 'lucide-react';
 import {
@@ -81,13 +84,20 @@ import {
   formatTime,
   inputToMinute,
   isTimelineEntry,
+  isDailyReflection,
   loadGuestEntries,
+  loadGuestReflections,
   minuteToInput,
   minutesNow,
   saveGuestEntries,
+  saveGuestReflections,
   shiftDate,
   snapMinute,
   parseNaturalEntry,
+  reflectionFromCloudRecord,
+  reflectionRecordId,
+  toCloudReflectionRecord,
+  type DailyReflection,
   type NaturalEntryDraft,
   type TimelineEntry,
 } from '@/lib/daymark';
@@ -110,6 +120,12 @@ export default function Home() {
   const [selectedDate, setSelectedDate] = useState('');
   const [guestEntries, setGuestEntries] = useState<TimelineEntry[]>([]);
   const [cloudEntries, setCloudEntries] = useState<TimelineEntry[]>([]);
+  const [guestReflections, setGuestReflections] = useState<DailyReflection[]>(
+    [],
+  );
+  const [cloudReflections, setCloudReflections] = useState<DailyReflection[]>(
+    [],
+  );
   const [guestLoaded, setGuestLoaded] = useState(false);
   const [services, setServices] = useState<FirebaseServices | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -136,6 +152,7 @@ export default function Home() {
     () => new Set(),
   );
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [weeklyReviewOpen, setWeeklyReviewOpen] = useState(false);
 
   const [accountOpen, setAccountOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -155,12 +172,17 @@ export default function Home() {
 
   const today = dateKey();
   const activeEntries = user ? cloudEntries : guestEntries;
+  const activeReflections = user ? cloudReflections : guestReflections;
   const selectedEntries = useMemo(
     () =>
       activeEntries
         .filter((entry) => entry.date === selectedDate && !entry.deletedAt)
         .sort((a, b) => a.startMinute - b.startMinute),
     [activeEntries, selectedDate],
+  );
+  const selectedReflection = useMemo(
+    () => activeReflections.find((item) => item.date === selectedDate) ?? null,
+    [activeReflections, selectedDate],
   );
 
   useEffect(() => {
@@ -230,6 +252,7 @@ export default function Home() {
 
     setSelectedDate(openedOn);
     setGuestEntries(loadGuestEntries());
+    setGuestReflections(loadGuestReflections());
     setGuestLoaded(true);
     setIsOnline(navigator.onLine);
     refreshClockAndDay();
@@ -284,6 +307,7 @@ export default function Home() {
   useEffect(() => {
     if (!user || !services) {
       setCloudEntries([]);
+      setCloudReflections([]);
       return;
     }
 
@@ -292,10 +316,15 @@ export default function Home() {
       entriesRef,
       { includeMetadataChanges: true },
       (snapshot) => {
-        const nextEntries = snapshot.docs
-          .map((entryDoc) => entryDoc.data())
-          .filter(isTimelineEntry);
+        const records = snapshot.docs.map((entryDoc) => entryDoc.data());
+        const nextEntries = records.filter(isTimelineEntry);
+        const nextReflections = records
+          .map(reflectionFromCloudRecord)
+          .filter((reflection): reflection is DailyReflection =>
+            Boolean(reflection),
+          );
         setCloudEntries(nextEntries);
+        setCloudReflections(nextReflections);
         const hasPendingWrites = snapshot.docs.some(
           (entryDoc) => entryDoc.metadata.hasPendingWrites,
         );
@@ -312,10 +341,15 @@ export default function Home() {
   }, [services, user]);
 
   useEffect(() => {
-    if (user && guestLoaded && guestEntries.some((entry) => !entry.deletedAt)) {
+    if (
+      user &&
+      guestLoaded &&
+      (guestEntries.some((entry) => !entry.deletedAt) ||
+        guestReflections.some(hasReflectionContent))
+    ) {
       setMigrationOpen(true);
     }
-  }, [guestEntries, guestLoaded, user]);
+  }, [guestEntries, guestLoaded, guestReflections, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -531,6 +565,47 @@ export default function Home() {
     });
   }
 
+  async function persistReflection(reflection: DailyReflection) {
+    if (user && services) {
+      setCloudReflections((current) => mergeReflection(current, reflection));
+      setSyncStatus(isOnline ? 'syncing' : 'offline');
+      try {
+        await setDoc(
+          doc(
+            services.db,
+            'users',
+            user.uid,
+            'entries',
+            reflectionRecordId(reflection.date),
+          ),
+          toCloudReflectionRecord(reflection),
+        );
+      } catch {
+        setSyncStatus('error');
+        notify('Saved offline. Daymark will retry when you reconnect.');
+      }
+      return;
+    }
+
+    setGuestReflections((current) => {
+      const next = mergeReflection(current, reflection);
+      saveGuestReflections(next);
+      return next;
+    });
+  }
+
+  async function saveSelectedReflection(fields: {
+    biggestWin: string;
+    tomorrowFocus: string;
+  }) {
+    await persistReflection({
+      date: selectedDate || today,
+      biggestWin: fields.biggestWin.trim(),
+      tomorrowFocus: fields.tomorrowFocus.trim(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
   async function handleEntrySubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     const parsed =
@@ -698,6 +773,7 @@ export default function Home() {
   async function migrateGuestEntries() {
     if (!services || !user) return;
     const entries = guestEntries.filter((entry) => !entry.deletedAt);
+    const reflections = guestReflections.filter(hasReflectionContent);
     setSyncStatus('syncing');
     try {
       for (let index = 0; index < entries.length; index += 450) {
@@ -710,11 +786,30 @@ export default function Home() {
         });
         await batch.commit();
       }
+      for (let index = 0; index < reflections.length; index += 450) {
+        const batch = writeBatch(services.db);
+        reflections.slice(index, index + 450).forEach((reflection) => {
+          batch.set(
+            doc(
+              services.db,
+              'users',
+              user.uid,
+              'entries',
+              reflectionRecordId(reflection.date),
+            ),
+            toCloudReflectionRecord(reflection),
+          );
+        });
+        await batch.commit();
+      }
       setGuestEntries([]);
       saveGuestEntries([]);
+      setGuestReflections([]);
+      saveGuestReflections([]);
       setMigrationOpen(false);
+      const recordCount = entries.length + reflections.length;
       notify(
-        `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} moved into your account.`,
+        `${recordCount} ${recordCount === 1 ? 'record' : 'records'} moved into your account.`,
       );
     } catch {
       setSyncStatus('error');
@@ -726,21 +821,28 @@ export default function Home() {
 
   async function exportBackup() {
     let entries = guestEntries.filter((entry) => !entry.deletedAt);
+    let reflections = guestReflections;
     if (user && services) {
       const snapshot = await getDocs(
         collection(services.db, 'users', user.uid, 'entries'),
       );
-      entries = snapshot.docs
-        .map((item) => item.data())
+      const records = snapshot.docs.map((item) => item.data());
+      entries = records
         .filter(isTimelineEntry)
         .filter((entry) => !entry.deletedAt);
+      reflections = records
+        .map(reflectionFromCloudRecord)
+        .filter((reflection): reflection is DailyReflection =>
+          Boolean(reflection),
+        );
     }
     const payload = JSON.stringify(
       {
         app: 'daymark',
-        version: 1,
+        version: 2,
         exportedAt: new Date().toISOString(),
         entries,
+        reflections,
       },
       null,
       2,
@@ -767,6 +869,9 @@ export default function Home() {
       const imported = (Array.isArray(parsed) ? parsed : parsed.entries).filter(
         isTimelineEntry,
       ) as TimelineEntry[];
+      const importedReflections = (
+        Array.isArray(parsed) ? [] : (parsed.reflections ?? [])
+      ).filter(isDailyReflection) as DailyReflection[];
       if (user && services) {
         for (let index = 0; index < imported.length; index += 450) {
           const batch = writeBatch(services.db);
@@ -778,6 +883,24 @@ export default function Home() {
           });
           await batch.commit();
         }
+        for (let index = 0; index < importedReflections.length; index += 450) {
+          const batch = writeBatch(services.db);
+          importedReflections
+            .slice(index, index + 450)
+            .forEach((reflection) => {
+              batch.set(
+                doc(
+                  services.db,
+                  'users',
+                  user.uid,
+                  'entries',
+                  reflectionRecordId(reflection.date),
+                ),
+                toCloudReflectionRecord(reflection),
+              );
+            });
+          await batch.commit();
+        }
       } else {
         setGuestEntries((current) => {
           const next = imported.reduce(
@@ -787,9 +910,18 @@ export default function Home() {
           saveGuestEntries(next);
           return next;
         });
+        setGuestReflections((current) => {
+          const next = importedReflections.reduce(
+            (all, reflection) => mergeReflection(all, reflection),
+            current,
+          );
+          saveGuestReflections(next);
+          return next;
+        });
       }
+      const importedCount = imported.length + importedReflections.length;
       notify(
-        `Imported ${imported.length} ${imported.length === 1 ? 'entry' : 'entries'}.`,
+        `Imported ${importedCount} ${importedCount === 1 ? 'record' : 'records'}.`,
       );
       setAccountOpen(false);
     } catch {
@@ -921,6 +1053,15 @@ export default function Home() {
                   <BookOpenText />
                   <span className="hidden sm:inline">Day in review</span>
                   <span className="sm:hidden">Review</span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-9 border-2 border-ink font-bold"
+                  onClick={() => setWeeklyReviewOpen(true)}
+                >
+                  <CalendarRange />
+                  <span className="hidden sm:inline">Weekly review</span>
+                  <span className="sm:hidden">Week</span>
                 </Button>
                 <Button
                   variant="outline"
@@ -1162,6 +1303,17 @@ export default function Home() {
         isToday={isToday}
         entries={selectedEntries}
         totalMinutes={totalMinutes}
+        reflection={selectedReflection}
+        onSaveReflection={saveSelectedReflection}
+      />
+
+      <WeeklyReviewDialog
+        open={weeklyReviewOpen}
+        onOpenChange={setWeeklyReviewOpen}
+        selectedDate={selectedDate || today}
+        today={today}
+        entries={activeEntries.filter((entry) => !entry.deletedAt)}
+        reflections={activeReflections}
       />
 
       <AccountDialog
@@ -1193,8 +1345,10 @@ export default function Home() {
               Bring this device with you?
             </DialogTitle>
             <DialogDescription className="font-medium">
-              You have {guestEntries.filter((entry) => !entry.deletedAt).length}{' '}
-              device-only entries. Move them into your account so they appear
+              You have{' '}
+              {guestEntries.filter((entry) => !entry.deletedAt).length +
+                guestReflections.filter(hasReflectionContent).length}{' '}
+              device-only records. Move them into your account so they appear
               everywhere.
             </DialogDescription>
           </DialogHeader>
@@ -1441,6 +1595,11 @@ type DayReviewDialogProps = {
   isToday: boolean;
   entries: TimelineEntry[];
   totalMinutes: number;
+  reflection: DailyReflection | null;
+  onSaveReflection: (fields: {
+    biggestWin: string;
+    tomorrowFocus: string;
+  }) => Promise<void>;
 };
 
 function DayReviewDialog({
@@ -1450,9 +1609,58 @@ function DayReviewDialog({
   isToday,
   entries,
   totalMinutes,
+  reflection,
+  onSaveReflection,
 }: DayReviewDialogProps) {
+  const [biggestWin, setBiggestWin] = useState('');
+  const [tomorrowFocus, setTomorrowFocus] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>(
+    'saved',
+  );
+  const savedDraft = useRef({ biggestWin: '', tomorrowFocus: '' });
+
+  useEffect(() => {
+    if (!open) return;
+    const next = {
+      biggestWin: reflection?.biggestWin ?? '',
+      tomorrowFocus: reflection?.tomorrowFocus ?? '',
+    };
+    setBiggestWin(next.biggestWin);
+    setTomorrowFocus(next.tomorrowFocus);
+    savedDraft.current = next;
+    setSaveStatus('saved');
+  }, [
+    date,
+    open,
+    reflection?.biggestWin,
+    reflection?.tomorrowFocus,
+    reflection?.updatedAt,
+  ]);
+
+  async function saveReflection() {
+    const next = {
+      biggestWin: biggestWin.trim(),
+      tomorrowFocus: tomorrowFocus.trim(),
+    };
+    if (
+      next.biggestWin === savedDraft.current.biggestWin &&
+      next.tomorrowFocus === savedDraft.current.tomorrowFocus
+    ) {
+      return;
+    }
+    savedDraft.current = next;
+    setSaveStatus('saving');
+    await onSaveReflection(next);
+    setSaveStatus('saved');
+  }
+
+  function handleOpenChange(nextOpen: boolean) {
+    if (!nextOpen) void saveReflection();
+    onOpenChange(nextOpen);
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         mobileSheet
         className="day-review-dialog rounded-none border-2 border-ink p-0 shadow-[7px_7px_0_#111] sm:max-w-[620px]"
@@ -1462,7 +1670,7 @@ function DayReviewDialog({
             {isToday ? 'Today' : formatDay(date)} in review
           </DialogTitle>
           <DialogDescription className="font-semibold text-ink/75">
-            A read-only view of everything you accomplished.
+            Read back what happened, then leave a thought for yourself.
           </DialogDescription>
         </DialogHeader>
 
@@ -1505,6 +1713,264 @@ function DayReviewDialog({
             <p>They’ll appear here in time order as you fill the timeline.</p>
           </div>
         )}
+
+        <section className="day-reflection" aria-labelledby="reflection-title">
+          <div className="day-reflection__heading">
+            <div>
+              <p>Close the loop</p>
+              <h3 id="reflection-title">A quick reflection</h3>
+            </div>
+            <span aria-live="polite">
+              {saveStatus === 'saving'
+                ? 'Saving…'
+                : saveStatus === 'unsaved'
+                  ? 'Saves when you leave the field'
+                  : 'Saved automatically'}
+            </span>
+          </div>
+          <div className="day-reflection__fields">
+            <label htmlFor="biggest-win">
+              <span>
+                <Trophy /> Biggest win
+              </span>
+              <Textarea
+                id="biggest-win"
+                value={biggestWin}
+                maxLength={2000}
+                onChange={(event) => {
+                  setBiggestWin(event.target.value);
+                  setSaveStatus('unsaved');
+                }}
+                onBlur={() => void saveReflection()}
+                placeholder="What felt most meaningful today?"
+              />
+            </label>
+            <label htmlFor="tomorrow-focus">
+              <span>
+                <Target /> Tomorrow’s focus
+              </span>
+              <Textarea
+                id="tomorrow-focus"
+                value={tomorrowFocus}
+                maxLength={2000}
+                onChange={(event) => {
+                  setTomorrowFocus(event.target.value);
+                  setSaveStatus('unsaved');
+                }}
+                onBlur={() => void saveReflection()}
+                placeholder="What deserves your attention next?"
+              />
+            </label>
+          </div>
+        </section>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type WeeklyReviewDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selectedDate: string;
+  today: string;
+  entries: TimelineEntry[];
+  reflections: DailyReflection[];
+};
+
+function WeeklyReviewDialog({
+  open,
+  onOpenChange,
+  selectedDate,
+  today,
+  entries,
+  reflections,
+}: WeeklyReviewDialogProps) {
+  const currentWeekStart = startOfWeekKey(today);
+  const [weekStart, setWeekStart] = useState(startOfWeekKey(selectedDate));
+
+  useEffect(() => {
+    if (open) setWeekStart(startOfWeekKey(selectedDate));
+  }, [open, selectedDate]);
+
+  const days = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, index) => {
+        const date = shiftDate(weekStart, index);
+        const dayEntries = entries
+          .filter((entry) => entry.date === date && !entry.deletedAt)
+          .sort((a, b) => a.startMinute - b.startMinute);
+        return {
+          date,
+          entries: dayEntries,
+          reflection:
+            reflections.find((reflection) => reflection.date === date) ?? null,
+          totalMinutes: dayEntries.reduce(
+            (total, entry) => total + entry.endMinute - entry.startMinute,
+            0,
+          ),
+        };
+      }),
+    [entries, reflections, weekStart],
+  );
+  const weekEntries = days.flatMap((day) => day.entries);
+  const weekMinutes = days.reduce((total, day) => total + day.totalMinutes, 0);
+  const activeDays = days.filter(
+    (day) => day.entries.length || hasReflectionContent(day.reflection),
+  ).length;
+  const longestEntry = weekEntries.reduce<TimelineEntry | null>(
+    (longest, entry) =>
+      !longest ||
+      entry.endMinute - entry.startMinute >
+        longest.endMinute - longest.startMinute
+        ? entry
+        : longest,
+    null,
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        mobileSheet
+        className="weekly-review-dialog rounded-none border-2 border-ink p-0 shadow-[7px_7px_0_#111] sm:max-w-[760px]"
+      >
+        <DialogHeader className="border-b-2 border-ink bg-blue p-5 pr-14 text-white">
+          <DialogTitle className="text-2xl font-black tracking-[-0.04em]">
+            Weekly review
+          </DialogTitle>
+          <DialogDescription className="font-semibold text-white/80">
+            Your accomplishments and reflections, together in one place.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="weekly-review-nav">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => setWeekStart(shiftDate(weekStart, -7))}
+            aria-label="Previous week"
+          >
+            <ChevronLeft />
+          </Button>
+          <strong>
+            {formatDay(weekStart, true)}–
+            {formatDay(shiftDate(weekStart, 6), true)}
+          </strong>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            disabled={weekStart >= currentWeekStart}
+            onClick={() => setWeekStart(shiftDate(weekStart, 7))}
+            aria-label="Next week"
+          >
+            <ChevronRight />
+          </Button>
+        </div>
+
+        <section className="weekly-review-summary" aria-label="Week summary">
+          <div>
+            <strong>{formatDuration(weekMinutes)}</strong>
+            <span>logged</span>
+          </div>
+          <div>
+            <strong>{weekEntries.length}</strong>
+            <span>accomplishments</span>
+          </div>
+          <div>
+            <strong>{activeDays}</strong>
+            <span>active days</span>
+          </div>
+        </section>
+
+        <p className="weekly-review-narrative">
+          {weekEntries.length ? (
+            <>
+              You recorded <strong>{weekEntries.length}</strong>{' '}
+              {weekEntries.length === 1 ? 'accomplishment' : 'accomplishments'}{' '}
+              across <strong>{activeDays}</strong>{' '}
+              {activeDays === 1 ? 'day' : 'days'}.
+              {longestEntry && (
+                <>
+                  {' '}
+                  Your longest focused stretch was{' '}
+                  <strong>
+                    {formatDuration(
+                      longestEntry.endMinute - longestEntry.startMinute,
+                    )}
+                  </strong>{' '}
+                  on {formatDay(longestEntry.date, true)}.
+                </>
+              )}
+            </>
+          ) : (
+            'Nothing is recorded for this week yet. Your entries and reflections will collect here as the week unfolds.'
+          )}
+        </p>
+
+        <div className="weekly-review-days">
+          {days.map((day) => (
+            <section
+              key={day.date}
+              className={cn(
+                'weekly-day',
+                day.date === today && 'weekly-day--today',
+              )}
+            >
+              <header>
+                <div>
+                  <strong>
+                    {day.date === today ? 'Today' : formatDay(day.date, true)}
+                  </strong>
+                  <span>{formatDuration(day.totalMinutes)}</span>
+                </div>
+                <small>
+                  {day.entries.length}{' '}
+                  {day.entries.length === 1 ? 'entry' : 'entries'}
+                </small>
+              </header>
+
+              {day.entries.length ? (
+                <ol>
+                  {day.entries.map((entry) => (
+                    <li key={entry.id}>
+                      <time>
+                        {formatTime(entry.startMinute)}–
+                        {formatTime(entry.endMinute)}
+                      </time>
+                      <span>{entry.title}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="weekly-day__empty">No accomplishments logged.</p>
+              )}
+
+              {hasReflectionContent(day.reflection) && (
+                <div className="weekly-day__reflection">
+                  {day.reflection.biggestWin && (
+                    <p>
+                      <Trophy />
+                      <span>
+                        <strong>Biggest win</strong>
+                        {day.reflection.biggestWin}
+                      </span>
+                    </p>
+                  )}
+                  {day.reflection.tomorrowFocus && (
+                    <p>
+                      <Target />
+                      <span>
+                        <strong>Next focus</strong>
+                        {day.reflection.tomorrowFocus}
+                      </span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </section>
+          ))}
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -2041,6 +2507,31 @@ function readableAuthError(error: unknown) {
   if (code.includes('network-request-failed'))
     return 'Could not reach the sync service. Check your connection.';
   return 'Something went wrong while signing in. Please try again.';
+}
+
+function mergeReflection(
+  reflections: DailyReflection[],
+  next: DailyReflection,
+) {
+  return [
+    ...reflections.filter((reflection) => reflection.date !== next.date),
+    next,
+  ].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function hasReflectionContent(
+  reflection: DailyReflection | null | undefined,
+): reflection is DailyReflection {
+  return Boolean(
+    reflection && (reflection.biggestWin || reflection.tomorrowFocus),
+  );
+}
+
+function startOfWeekKey(key: string) {
+  const date = dateFromKey(key);
+  const daysSinceMonday = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - daysSinceMonday);
+  return dateKey(date);
 }
 
 function findTimelineGaps(

@@ -13,6 +13,24 @@ export type TimelineEntry = {
   deletedAt?: string | null;
 };
 
+export type DailyReflection = {
+  date: string;
+  biggestWin: string;
+  tomorrowFocus: string;
+  updatedAt: string;
+};
+
+type CloudReflectionRecord = DailyReflection & {
+  id: string;
+  title: string;
+  startMinute: number;
+  endMinute: number;
+  color: EntryColor;
+  createdAt: string;
+  deletedAt: null;
+  recordType: 'reflection';
+};
+
 export type NaturalEntryDraft = {
   title: string;
   startMinute: number;
@@ -28,6 +46,7 @@ type NaturalEntryContext = {
 };
 
 export const GUEST_STORAGE_KEY = 'daymark.entries.v1';
+export const REFLECTION_STORAGE_KEY = 'daymark.reflections.v1';
 export const DURATION_STORAGE_KEY = 'daymark.duration.v1';
 export const TIMELINE_ROW_HEIGHT = 60;
 
@@ -271,10 +290,77 @@ export function saveGuestEntries(entries: TimelineEntry[]) {
   window.localStorage.setItem(GUEST_STORAGE_KEY, JSON.stringify(entries));
 }
 
+export function loadGuestReflections(): DailyReflection[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(REFLECTION_STORAGE_KEY) ?? '[]',
+    );
+    return Array.isArray(parsed) ? parsed.filter(isDailyReflection) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveGuestReflections(reflections: DailyReflection[]) {
+  window.localStorage.setItem(
+    REFLECTION_STORAGE_KEY,
+    JSON.stringify(reflections),
+  );
+}
+
+export function isDailyReflection(value: unknown): value is DailyReflection {
+  if (!value || typeof value !== 'object') return false;
+  const reflection = value as Partial<DailyReflection>;
+  return (
+    typeof reflection.date === 'string' &&
+    typeof reflection.biggestWin === 'string' &&
+    typeof reflection.tomorrowFocus === 'string' &&
+    typeof reflection.updatedAt === 'string'
+  );
+}
+
+export function reflectionRecordId(date: string) {
+  return `reflection-${date}`;
+}
+
+export function toCloudReflectionRecord(
+  reflection: DailyReflection,
+): CloudReflectionRecord {
+  return {
+    ...reflection,
+    id: reflectionRecordId(reflection.date),
+    title: 'Daily reflection',
+    startMinute: 0,
+    endMinute: 1,
+    color: 'yellow',
+    createdAt: reflection.updatedAt,
+    deletedAt: null,
+    recordType: 'reflection',
+  };
+}
+
+export function reflectionFromCloudRecord(
+  value: unknown,
+): DailyReflection | null {
+  if (!value || typeof value !== 'object') return null;
+  const record = value as Partial<CloudReflectionRecord>;
+  if (record.recordType !== 'reflection' || !isDailyReflection(record)) {
+    return null;
+  }
+  return {
+    date: record.date,
+    biggestWin: record.biggestWin,
+    tomorrowFocus: record.tomorrowFocus,
+    updatedAt: record.updatedAt,
+  };
+}
+
 export function isTimelineEntry(value: unknown): value is TimelineEntry {
   if (!value || typeof value !== 'object') return false;
-  const entry = value as Partial<TimelineEntry>;
+  const entry = value as Partial<TimelineEntry> & { recordType?: unknown };
   return (
+    entry.recordType !== 'reflection' &&
     typeof entry.id === 'string' &&
     typeof entry.title === 'string' &&
     typeof entry.date === 'string' &&
