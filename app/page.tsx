@@ -403,14 +403,18 @@ export default function Home() {
       ),
     [selectedEntries],
   );
+  const gapStartMinute =
+    typeof selectedReflection?.wakeMinute === 'number'
+      ? Math.max(0, Math.min(24 * 60, selectedReflection.wakeMinute))
+      : 6 * 60;
   const timelineGaps = useMemo(
     () =>
       findTimelineGaps(
         selectedEntries,
-        6 * 60,
+        gapStartMinute,
         isToday ? clockMinute : 24 * 60,
       ),
-    [clockMinute, isToday, selectedEntries],
+    [clockMinute, gapStartMinute, isToday, selectedEntries],
   );
   const suggestedGap = timelineGaps[0] ?? null;
 
