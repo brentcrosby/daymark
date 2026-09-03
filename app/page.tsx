@@ -97,11 +97,18 @@ import { cn } from '@/lib/utils';
 
 type EditorMode = 'quick' | 'detail' | 'edit';
 type SyncStatus = 'local' | 'saved' | 'syncing' | 'offline' | 'error';
+type TimelineSegment = {
+  key: string;
+  entry: TimelineEntry;
+  hour: number;
+  startMinute: number;
+  endMinute: number;
+  continuesBefore: boolean;
+  continuesAfter: boolean;
+};
 
 const hours = Array.from({ length: 24 }, (_, index) => index);
-const SHORT_ENTRY_THRESHOLD = 30;
-const SHORT_ENTRY_MIN_HEIGHT = 15;
-const ENTRY_TEXT_MIN_HEIGHT = 24;
+const HOUR_SLICE_HEIGHT = 40;
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState('');
@@ -154,6 +161,31 @@ export default function Home() {
         .sort((a, b) => a.startMinute - b.startMinute),
     [activeEntries, selectedDate],
   );
+  const timelineSegments = useMemo<TimelineSegment[]>(
+    () =>
+      selectedEntries.flatMap((entry) => {
+        const firstHour = Math.floor(entry.startMinute / 60);
+        const lastHour = Math.floor((entry.endMinute - 1) / 60);
+
+        return Array.from(
+          { length: lastHour - firstHour + 1 },
+          (_, index) => {
+            const hour = firstHour + index;
+            const hourStart = hour * 60;
+            return {
+              key: `${entry.id}:${hour}`,
+              entry,
+              hour,
+              startMinute: Math.max(entry.startMinute, hourStart),
+              endMinute: Math.min(entry.endMinute, hourStart + 60),
+              continuesBefore: entry.startMinute < hourStart,
+              continuesAfter: entry.endMinute > hourStart + 60,
+            };
+          },
+        );
+      }),
+    [selectedEntries],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -163,14 +195,14 @@ export default function Home() {
       if (cancelled) return;
 
       const next = new Set<string>();
-      selectedEntries.forEach((entry) => {
-        const element = timelineEntryRefs.current.get(entry.id);
+      timelineSegments.forEach((segment) => {
+        const element = timelineEntryRefs.current.get(segment.key);
         const summary = element?.querySelector<HTMLElement>(
           '.timeline-entry-summary',
         );
 
         if (summary && summary.scrollWidth > summary.clientWidth + 1) {
-          next.add(entry.id);
+          next.add(segment.key);
         }
       });
 
@@ -199,7 +231,7 @@ export default function Home() {
       cancelAnimationFrame(frame);
       window.removeEventListener('resize', scheduleMeasurement);
     };
-  }, [selectedEntries]);
+  }, [timelineSegments]);
   const isToday = selectedDate === today;
 
   useEffect(() => {
@@ -422,14 +454,14 @@ export default function Home() {
     setEntryError('');
   }
 
-  function handleEntryClick(entry: TimelineEntry) {
+  function handleEntryClick(entry: TimelineEntry, presentationId = entry.id) {
     if (!window.matchMedia('(max-width: 639px)').matches) {
       openEdit(entry);
       return;
     }
 
-    if (expandedEntryId !== entry.id) {
-      setExpandedEntryId(entry.id);
+    if (expandedEntryId !== presentationId) {
+      setExpandedEntryId(presentationId);
       return;
     }
 
@@ -440,13 +472,15 @@ export default function Home() {
     event: MouseEvent<HTMLButtonElement>,
     hour: number,
   ) {
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const relative = Math.max(
+    const lane = event.currentTarget.querySelector('.timeline-rule');
+    const bounds = lane?.getBoundingClientRect();
+    if (!bounds) return;
+    const progress = Math.max(
       0,
-      Math.min(bounds.height - 1, event.clientY - bounds.top),
+      Math.min(0.999, (event.clientX - bounds.left) / bounds.width),
     );
-    const quarter = Math.floor(relative / (bounds.height / 4));
-    openDetailedAdd(hour * 60 + quarter * 15);
+    const minuteWithinHour = Math.min(55, snapMinute(progress * 60, 5));
+    openDetailedAdd(hour * 60 + minuteWithinHour);
   }
 
   async function persistEntry(entry: TimelineEntry) {
@@ -826,7 +860,7 @@ export default function Home() {
                   {isToday ? 'Today’s timeline' : formatDay(selectedDate)}
                 </h2>
                 <p className="text-xs font-semibold text-muted-foreground">
-                  Tap any time to add a precise entry
+                  Tap across an hour to choose a precise start time
                 </p>
               </div>
               <div className="flex gap-2">
@@ -871,60 +905,78 @@ export default function Home() {
                 </button>
               ))}
 
-              {isToday && (
-                <div
-                  ref={nowMarkerRef}
-                  className="now-line"
-                  style={{ top: (currentMinute / 60) * TIMELINE_ROW_HEIGHT }}
-                >
-                  <span>NOW</span>
-                </div>
-              )}
-
               <div className="timeline-entries" aria-live="polite">
-                {selectedEntries.map((entry) => {
-                  const durationHeight =
-                    ((entry.endMinute - entry.startMinute) / 60) *
-                    TIMELINE_ROW_HEIGHT;
-                  const isShort = durationHeight < SHORT_ENTRY_THRESHOLD;
-                  const renderedHeight = isShort
-                    ? Math.max(SHORT_ENTRY_MIN_HEIGHT, durationHeight)
-                    : durationHeight;
-                  const hidesText = renderedHeight < ENTRY_TEXT_MIN_HEIGHT;
+                {isToday && (
+                  <div
+                    ref={nowMarkerRef}
+                    className="now-line"
+                    style={{
+                      top:
+                        Math.floor(currentMinute / 60) *
+                          TIMELINE_ROW_HEIGHT +
+                        7,
+                      left: `${((currentMinute % 60) / 60) * 100}%`,
+                    }}
+                  >
+                    <span>NOW</span>
+                  </div>
+                )}
+
+                {timelineSegments.map((segment) => {
+                  const { entry } = segment;
+                  const segmentDuration =
+                    segment.endMinute - segment.startMinute;
+                  const left =
+                    ((segment.startMinute - segment.hour * 60) / 60) * 100;
+                  const width = (segmentDuration / 60) * 100;
+                  const right = Math.max(0, 100 - left - width);
+                  const hidesText = segmentDuration < 10;
                   const needsExpansion =
-                    hidesText || overflowingEntryIds.has(entry.id);
-                  const isExpanded = expandedEntryId === entry.id;
+                    hidesText || overflowingEntryIds.has(segment.key);
+                  const isExpanded = expandedEntryId === segment.key;
                   const entrySummary = `${formatTime(entry.startMinute)} - ${formatTime(entry.endMinute)} - ${entry.title}`;
 
                   return (
                     <button
-                      key={entry.id}
+                      key={segment.key}
                       ref={(element) => {
                         if (element) {
-                          timelineEntryRefs.current.set(entry.id, element);
+                          timelineEntryRefs.current.set(segment.key, element);
                         } else {
-                          timelineEntryRefs.current.delete(entry.id);
+                          timelineEntryRefs.current.delete(segment.key);
                         }
                       }}
                       className={cn(
                         'timeline-entry',
                         `timeline-entry--${entry.color}`,
-                        isShort && 'timeline-entry--compact',
+                        segmentDuration < 10 && 'timeline-entry--compact',
                         hidesText && 'timeline-entry--text-hidden',
                         needsExpansion && 'timeline-entry--needs-expansion',
                         isExpanded && 'timeline-entry--expanded',
+                        segment.continuesBefore &&
+                          'timeline-entry--continues-before',
+                        segment.continuesAfter &&
+                          'timeline-entry--continues-after',
+                        left + width / 2 > 50 &&
+                          'timeline-entry--expands-left',
                         flashId === entry.id && 'timeline-entry--flash',
                       )}
                       style={
                         {
                           top:
-                            (entry.startMinute / 60) * TIMELINE_ROW_HEIGHT,
-                          height: renderedHeight,
-                          '--entry-base-height': `${renderedHeight}px`,
+                            segment.hour * TIMELINE_ROW_HEIGHT +
+                            (TIMELINE_ROW_HEIGHT - HOUR_SLICE_HEIGHT) / 2,
+                          left: `${left}%`,
+                          width: `${width}%`,
+                          height: HOUR_SLICE_HEIGHT,
+                          '--entry-base-height': `${HOUR_SLICE_HEIGHT}px`,
+                          '--entry-base-width': `${width}%`,
+                          '--entry-left': `${left}%`,
+                          '--entry-right': `${right}%`,
                         } as CSSProperties
                       }
                       type="button"
-                      onClick={() => handleEntryClick(entry)}
+                      onClick={() => handleEntryClick(entry, segment.key)}
                       aria-expanded={isExpanded}
                       aria-label={`View or edit ${entry.title}, ${formatTime(entry.startMinute)} to ${formatTime(entry.endMinute)}`}
                     >
