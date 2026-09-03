@@ -491,7 +491,7 @@
 
   .timeline-row,
   .timeline-gap {
-    cursor: crosshair;
+    cursor: default;
   }
 }
 
