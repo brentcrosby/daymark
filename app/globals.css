@@ -248,30 +248,6 @@
   background: color-mix(in srgb, var(--sun) 10%, transparent);
 }
 
-.timeline-add {
-  position: absolute;
-  z-index: 2;
-  top: -0.1rem;
-  right: 0.8rem;
-  display: none;
-  align-items: center;
-  gap: 0.2rem;
-  border: 1px solid var(--ink);
-  background: #fff;
-  padding: 0.2rem 0.45rem;
-  font-size: 0.7rem;
-  font-weight: 900;
-}
-
-.timeline-add svg {
-  width: 0.8rem;
-}
-
-.timeline-row:hover .timeline-add,
-.timeline-row:focus-visible .timeline-add {
-  display: flex;
-}
-
 .timeline-entries {
   position: absolute;
   inset: 0 12px 0 68px;

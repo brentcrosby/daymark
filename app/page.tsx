@@ -653,6 +653,11 @@ export default function Home() {
 
     if (!drag.moved) {
       setDragRange(null);
+      suppressTimelineClickRef.current = true;
+      window.setTimeout(() => {
+        suppressTimelineClickRef.current = false;
+      }, 0);
+      openDetailedAdd(drag.anchorMinute);
       return;
     }
 
@@ -1211,7 +1216,7 @@ export default function Home() {
                 </h2>
                 <p className="text-xs font-semibold text-muted-foreground">
                   <span className="timeline-hint timeline-hint--desktop">
-                    Hover for exact time · drag blank time to select a range
+                    Hover for exact time · click to add · drag to select a range
                   </span>
                   <span className="timeline-hint timeline-hint--mobile">
                     Tap any time to add a precise entry
@@ -1284,9 +1289,6 @@ export default function Home() {
                     <i />
                     <i />
                     <i />
-                  </span>
-                  <span className="timeline-add">
-                    <Plus /> Add
                   </span>
                 </button>
               ))}
