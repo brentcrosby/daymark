@@ -3,6 +3,7 @@
 import {
   type CSSProperties,
   type ChangeEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type PointerEvent as ReactPointerEvent,
   type SyntheticEvent,
@@ -2191,9 +2192,15 @@ function DayReviewDialog({
                   {formatTime(entry.startMinute)}–{formatTime(entry.endMinute)}
                 </time>
                 <div>
-                  <p>{entry.title}</p>
+                  <FormattedEntryText
+                    text={entry.title}
+                    className="day-review-item__title"
+                  />
                   {entry.details && (
-                    <p className="day-review-item__details">{entry.details}</p>
+                    <FormattedEntryText
+                      text={entry.details}
+                      className="day-review-item__details"
+                    />
                   )}
                 </div>
               </li>
@@ -2691,7 +2698,10 @@ function WeeklyReviewDialog({
                         {formatTime(entry.startMinute)}–
                         {formatTime(entry.endMinute)}
                       </time>
-                      <span>{entry.title}</span>
+                      <FormattedEntryText
+                        text={entry.title}
+                        className="weekly-day__entry-title"
+                      />
                     </li>
                   ))}
                 </ol>
@@ -2791,6 +2801,9 @@ function EntryDialog(props: EntryDialogProps) {
               value={props.title}
               onChange={(event) => props.setTitle(event.target.value)}
               onKeyDown={(event) => {
+                if (continueBulletList(event, props.title, props.setTitle)) {
+                  return;
+                }
                 if (event.key === 'Enter' && !event.shiftKey) {
                   event.preventDefault();
                   event.currentTarget.form?.requestSubmit();
@@ -3035,8 +3048,13 @@ function EntryDialog(props: EntryDialogProps) {
                   autoFocus={props.focusDetails}
                   value={props.details}
                   onChange={(event) => props.setDetails(event.target.value)}
+                  onKeyDown={(event) =>
+                    continueBulletList(event, props.details, props.setDetails)
+                  }
                   className="min-h-24 rounded-none border-2 border-ink bg-white text-base"
-                  placeholder="What changed, what you decided, or anything worth remembering…"
+                  placeholder={
+                    'Add context…\n- Start a line with - for bullets'
+                  }
                   aria-label="Optional accomplishment details"
                 />
               </label>
@@ -3278,6 +3296,97 @@ function mergeEntry(entries: TimelineEntry[], entry: TimelineEntry) {
   const next = [...entries];
   next[existingIndex] = entry;
   return next;
+}
+
+function continueBulletList(
+  event: ReactKeyboardEvent<HTMLTextAreaElement>,
+  value: string,
+  setValue: (value: string) => void,
+) {
+  if (
+    event.key !== 'Enter' ||
+    event.shiftKey ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey
+  ) {
+    return false;
+  }
+
+  const textarea = event.currentTarget;
+  const selectionStart = textarea.selectionStart;
+  const selectionEnd = textarea.selectionEnd;
+  const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+  const currentLine = value.slice(lineStart, selectionStart);
+  const bullet = currentLine.match(/^(\s*)-\s(.*)$/);
+  if (!bullet) return false;
+
+  event.preventDefault();
+  const indentation = bullet[1];
+  const content = bullet[2];
+  const insertion = content.trim() ? `\n${indentation}- ` : '';
+  const replaceFrom = content.trim() ? selectionStart : lineStart;
+  const nextValue =
+    value.slice(0, replaceFrom) + insertion + value.slice(selectionEnd);
+  const nextCaret = replaceFrom + insertion.length;
+  setValue(nextValue);
+  requestAnimationFrame(() => {
+    textarea.setSelectionRange(nextCaret, nextCaret);
+  });
+  return true;
+}
+
+function FormattedEntryText({
+  text,
+  className,
+}: {
+  text: string;
+  className?: string;
+}) {
+  const blocks = entryTextBlocks(text);
+  return (
+    <div className={cn('formatted-entry-text', className)}>
+      {blocks.map((block, index) =>
+        block.type === 'list' ? (
+          <ul key={`list-${index}`}>
+            {block.items.map((item, itemIndex) => (
+              <li key={`${item}-${itemIndex}`}>{item}</li>
+            ))}
+          </ul>
+        ) : (
+          <p key={`text-${index}`}>{block.lines.join('\n')}</p>
+        ),
+      )}
+    </div>
+  );
+}
+
+function entryTextBlocks(text: string) {
+  const blocks: Array<
+    { type: 'text'; lines: string[] } | { type: 'list'; items: string[] }
+  > = [];
+
+  for (const line of text.split('\n')) {
+    const bullet = line.match(/^\s*-\s+(.+)$/);
+    if (bullet) {
+      const last = blocks.at(-1);
+      if (last?.type === 'list') {
+        last.items.push(bullet[1]);
+      } else {
+        blocks.push({ type: 'list', items: [bullet[1]] });
+      }
+      continue;
+    }
+
+    const last = blocks.at(-1);
+    if (last?.type === 'text') {
+      last.lines.push(line);
+    } else {
+      blocks.push({ type: 'text', lines: [line] });
+    }
+  }
+
+  return blocks;
 }
 
 function makeId() {

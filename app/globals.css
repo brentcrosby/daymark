@@ -1155,7 +1155,7 @@
   white-space: nowrap;
 }
 
-.day-review-item p {
+.day-review-item__title {
   overflow-wrap: anywhere;
   font-size: 0.95rem;
   font-weight: 750;
@@ -1167,7 +1167,32 @@
   color: var(--muted-foreground);
   font-size: 0.78rem;
   font-weight: 600;
+  line-height: 1.5;
+}
+
+.formatted-entry-text > * + * {
+  margin-top: 0.35rem;
+}
+
+.formatted-entry-text p {
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
   white-space: pre-wrap;
+}
+
+.formatted-entry-text ul {
+  list-style: disc;
+  padding-left: 1.2rem;
+}
+
+.formatted-entry-text li {
+  padding-left: 0.08rem;
+  overflow-wrap: anywhere;
+}
+
+.formatted-entry-text li + li {
+  margin-top: 0.2rem;
 }
 
 .day-review-empty {
@@ -1540,10 +1565,11 @@
   white-space: nowrap;
 }
 
-.weekly-day li span {
+.weekly-day__entry-title {
   overflow-wrap: anywhere;
   font-size: 0.78rem;
   font-weight: 750;
+  line-height: 1.45;
 }
 
 .weekly-day__empty {
