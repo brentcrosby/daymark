@@ -24,6 +24,7 @@ import {
   Copy,
   Download,
   FileUp,
+  FileText,
   LoaderCircle,
   LogOut,
   Plus,
@@ -86,6 +87,8 @@ import {
   saveGuestEntries,
   shiftDate,
   snapMinute,
+  parseNaturalEntry,
+  type NaturalEntryDraft,
   type TimelineEntry,
 } from '@/lib/daymark';
 import {
@@ -119,6 +122,9 @@ export default function Home() {
   const [editorMode, setEditorMode] = useState<EditorMode>('quick');
   const [editingEntry, setEditingEntry] = useState<TimelineEntry | null>(null);
   const [entryTitle, setEntryTitle] = useState('');
+  const [entryDetails, setEntryDetails] = useState('');
+  const [showEntryDetails, setShowEntryDetails] = useState(false);
+  const [focusEntryDetails, setFocusEntryDetails] = useState(false);
   const [entryStart, setEntryStart] = useState('09:00');
   const [entryEnd, setEntryEnd] = useState('09:30');
   const [selectedDuration, setSelectedDuration] = useState(30);
@@ -139,6 +145,8 @@ export default function Home() {
   const [authBusy, setAuthBusy] = useState(false);
   const [migrationOpen, setMigrationOpen] = useState(false);
   const [toast, setToast] = useState('');
+  const [toastActionEntry, setToastActionEntry] =
+    useState<TimelineEntry | null>(null);
 
   const nowMarkerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -340,10 +348,16 @@ export default function Home() {
       ),
     [selectedEntries],
   );
-  const suggestedGap = useMemo(
-    () => findUsefulGap(selectedEntries, isToday ? minutesNow() : 24 * 60),
-    [isToday, selectedEntries],
+  const timelineGaps = useMemo(
+    () =>
+      findTimelineGaps(
+        selectedEntries,
+        6 * 60,
+        isToday ? clockMinute : 24 * 60,
+      ),
+    [clockMinute, isToday, selectedEntries],
   );
+  const suggestedGap = timelineGaps[0] ?? null;
 
   const editorRange = useMemo(
     () => ({
@@ -353,10 +367,30 @@ export default function Home() {
     [entryEnd, entryStart],
   );
 
-  function notify(message: string) {
+  const naturalDraft = useMemo(
+    () =>
+      editorMode === 'edit'
+        ? null
+        : parseNaturalEntry(entryTitle, {
+            referenceMinute: editorRange.endMinute,
+            startMinute: editorRange.startMinute,
+            endMinute: editorRange.endMinute,
+            anchor: editorMode === 'quick' ? 'before' : 'after',
+          }),
+    [editorMode, editorRange, entryTitle],
+  );
+
+  function notify(message: string, actionEntry: TimelineEntry | null = null) {
     setToast(message);
+    setToastActionEntry(actionEntry);
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(''), 3200);
+    toastTimer.current = setTimeout(
+      () => {
+        setToast('');
+        setToastActionEntry(null);
+      },
+      actionEntry ? 6000 : 3200,
+    );
   }
 
   function openQuickAdd() {
@@ -365,6 +399,9 @@ export default function Home() {
     setEditorMode('quick');
     setEditingEntry(null);
     setEntryTitle('');
+    setEntryDetails('');
+    setShowEntryDetails(false);
+    setFocusEntryDetails(false);
     setEntryStart(minuteToInput(Math.max(0, endMinute - selectedDuration)));
     setEntryEnd(minuteToInput(endMinute));
     setCustomDuration(false);
@@ -377,6 +414,9 @@ export default function Home() {
     setEditorMode('detail');
     setEditingEntry(null);
     setEntryTitle('');
+    setEntryDetails('');
+    setShowEntryDetails(false);
+    setFocusEntryDetails(false);
     setEntryStart(minuteToInput(safeStart));
     setEntryEnd(
       minuteToInput(Math.min(24 * 60 - 1, safeStart + selectedDuration)),
@@ -386,11 +426,30 @@ export default function Home() {
     setEntryOpen(true);
   }
 
-  function openEdit(entry: TimelineEntry) {
+  function openGapAdd(startMinute: number, endMinute: number) {
+    const safeEnd = Math.min(24 * 60 - 1, endMinute);
+    setEditorMode('detail');
+    setEditingEntry(null);
+    setEntryTitle('');
+    setEntryDetails('');
+    setShowEntryDetails(false);
+    setFocusEntryDetails(false);
+    setEntryStart(minuteToInput(startMinute));
+    setEntryEnd(minuteToInput(safeEnd));
+    setSelectedDuration(safeEnd - startMinute);
+    setCustomDuration(false);
+    setEntryError('');
+    setEntryOpen(true);
+  }
+
+  function openEdit(entry: TimelineEntry, revealDetails = false) {
     setExpandedEntryId(null);
     setEditorMode('edit');
     setEditingEntry(entry);
     setEntryTitle(entry.title);
+    setEntryDetails(entry.details ?? '');
+    setShowEntryDetails(revealDetails || Boolean(entry.details));
+    setFocusEntryDetails(revealDetails);
     setEntryStart(minuteToInput(entry.startMinute));
     setEntryEnd(minuteToInput(entry.endMinute));
     setSelectedDuration(entry.endMinute - entry.startMinute);
@@ -474,24 +533,36 @@ export default function Home() {
 
   async function handleEntrySubmit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
-    const title = entryTitle.trim();
+    const parsed =
+      editorMode === 'edit'
+        ? null
+        : parseNaturalEntry(entryTitle, {
+            referenceMinute: editorRange.endMinute,
+            startMinute: editorRange.startMinute,
+            endMinute: editorRange.endMinute,
+            anchor: editorMode === 'quick' ? 'before' : 'after',
+          });
+    const title = parsed?.title ?? entryTitle.trim();
+    const range = parsed ?? editorRange;
     if (!title) {
       setEntryError('Write a short note about what you did.');
       return;
     }
-    if (editorRange.endMinute <= editorRange.startMinute) {
+    if (range.endMinute <= range.startMinute) {
       setEntryError('The end time needs to be after the start time.');
       return;
     }
 
     const timestamp = new Date().toISOString();
     const id = editingEntry?.id ?? makeId();
+    const details = entryDetails.trim();
     const entry: TimelineEntry = {
       id,
       title,
+      ...(details ? { details } : {}),
       date: selectedDate || today,
-      startMinute: editorRange.startMinute,
-      endMinute: editorRange.endMinute,
+      startMinute: range.startMinute,
+      endMinute: range.endMinute,
       color: editingEntry?.color ?? entryColor(id),
       createdAt: editingEntry?.createdAt ?? timestamp,
       updatedAt: timestamp,
@@ -499,13 +570,23 @@ export default function Home() {
     };
 
     await persistEntry(entry);
-    window.localStorage.setItem(DURATION_STORAGE_KEY, String(selectedDuration));
+    setSelectedDuration(range.endMinute - range.startMinute);
+    window.localStorage.setItem(
+      DURATION_STORAGE_KEY,
+      String(range.endMinute - range.startMinute),
+    );
     setEntryOpen(false);
     setEntryTitle('');
+    setEntryDetails('');
+    setShowEntryDetails(false);
+    setFocusEntryDetails(false);
     setEditingEntry(null);
     setFlashId(id);
     setTimeout(() => setFlashId(null), 1100);
-    notify(editingEntry ? 'Entry updated.' : 'Added to your timeline.');
+    notify(
+      editingEntry ? 'Entry updated.' : 'Added to your timeline.',
+      editingEntry ? null : entry,
+    );
   }
 
   async function deleteEditingEntry() {
@@ -531,6 +612,7 @@ export default function Home() {
     setEntryOpen(false);
     setEditingEntry(null);
     setEntryTitle('');
+    setEntryDetails('');
     notify('Entry deleted.');
   }
 
@@ -549,6 +631,7 @@ export default function Home() {
     });
     setEntryOpen(false);
     setEntryTitle('');
+    setEntryDetails('');
     notify('Entry duplicated.');
   }
 
@@ -882,6 +965,24 @@ export default function Home() {
               )}
 
               <div className="timeline-entries" aria-live="polite">
+                {timelineGaps.map((gap) => {
+                  const duration = gap.end - gap.start;
+                  return (
+                    <button
+                      key={`${gap.start}-${gap.end}`}
+                      type="button"
+                      className="timeline-gap"
+                      style={{
+                        top: (gap.start / 60) * TIMELINE_ROW_HEIGHT,
+                        height: (duration / 60) * TIMELINE_ROW_HEIGHT,
+                      }}
+                      onClick={() => openGapAdd(gap.start, gap.end)}
+                      aria-label={`Fill unlogged time from ${formatTime(gap.start)} to ${formatTime(gap.end)}`}
+                    >
+                      <span>Fill {formatDuration(duration)} gap</span>
+                    </button>
+                  );
+                })}
                 {selectedEntries.map((entry) => {
                   const durationHeight =
                     ((entry.endMinute - entry.startMinute) / 60) *
@@ -917,8 +1018,7 @@ export default function Home() {
                       )}
                       style={
                         {
-                          top:
-                            (entry.startMinute / 60) * TIMELINE_ROW_HEIGHT,
+                          top: (entry.startMinute / 60) * TIMELINE_ROW_HEIGHT,
                           height: renderedHeight,
                           '--entry-base-height': `${renderedHeight}px`,
                         } as CSSProperties
@@ -1026,10 +1126,13 @@ export default function Home() {
         mode={editorMode}
         title={entryTitle}
         setTitle={setEntryTitle}
-        duration={Math.max(
-          0,
-          editorRange.endMinute - editorRange.startMinute,
-        )}
+        details={entryDetails}
+        setDetails={setEntryDetails}
+        showDetails={showEntryDetails}
+        setShowDetails={setShowEntryDetails}
+        focusDetails={focusEntryDetails}
+        naturalDraft={naturalDraft}
+        duration={Math.max(0, editorRange.endMinute - editorRange.startMinute)}
         setDuration={setEditorDuration}
         customDuration={customDuration}
         setCustomDuration={setCustomDuration}
@@ -1121,9 +1224,25 @@ export default function Home() {
         onChange={importBackup}
       />
       {toast && (
-        <output className="app-toast" aria-live="polite">
+        <output
+          className={cn('app-toast', toastActionEntry && 'app-toast--action')}
+          aria-live="polite"
+        >
           <Check />
-          {toast}
+          <span>{toast}</span>
+          {toastActionEntry && (
+            <button
+              type="button"
+              onClick={() => {
+                const entry = toastActionEntry;
+                setToast('');
+                setToastActionEntry(null);
+                openEdit(entry, true);
+              }}
+            >
+              Add details
+            </button>
+          )}
         </output>
       )}
     </main>
@@ -1294,6 +1413,12 @@ type EntryDialogProps = {
   mode: EditorMode;
   title: string;
   setTitle: (title: string) => void;
+  details: string;
+  setDetails: (details: string) => void;
+  showDetails: boolean;
+  setShowDetails: (show: boolean) => void;
+  focusDetails: boolean;
+  naturalDraft: NaturalEntryDraft | null;
   duration: number;
   setDuration: (duration: number) => void;
   customDuration: boolean;
@@ -1364,7 +1489,12 @@ function DayReviewDialog({
                 <time>
                   {formatTime(entry.startMinute)}–{formatTime(entry.endMinute)}
                 </time>
-                <p>{entry.title}</p>
+                <div>
+                  <p>{entry.title}</p>
+                  {entry.details && (
+                    <p className="day-review-item__details">{entry.details}</p>
+                  )}
+                </div>
               </li>
             ))}
           </ol>
@@ -1438,7 +1568,7 @@ function EntryDialog(props: EntryDialogProps) {
           <div className="space-y-5 p-5">
             <Textarea
               // oxlint-disable-next-line jsx-a11y/no-autofocus -- opening this fast-capture dialog should put the user directly in the writing field.
-              autoFocus
+              autoFocus={!props.focusDetails}
               value={props.title}
               onChange={(event) => props.setTitle(event.target.value)}
               onKeyDown={(event) => {
@@ -1452,7 +1582,30 @@ function EntryDialog(props: EntryDialogProps) {
               aria-label="What did you do?"
             />
 
-            <section className="duration-control" aria-labelledby="duration-label">
+            {!isEdit && (
+              <div className="natural-entry-help">
+                {props.naturalDraft ? (
+                  <>
+                    <Sparkles />
+                    <span>
+                      Understood: <strong>{props.naturalDraft.title}</strong>,{' '}
+                      {formatTime(props.naturalDraft.startMinute)}–
+                      {formatTime(props.naturalDraft.endMinute)}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="natural-entry-help__example">Try</span>
+                    <span>“Read for 25m” or “Lunch 12:30–1pm”</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            <section
+              className="duration-control"
+              aria-labelledby="duration-label"
+            >
               <div className="duration-control__heading">
                 <p id="duration-label">How long did it take?</p>
                 <strong>{formatDuration(props.duration)}</strong>
@@ -1590,6 +1743,37 @@ function EntryDialog(props: EntryDialogProps) {
                 )}
               </strong>
             </div>
+
+            <button
+              type="button"
+              className="details-toggle"
+              onClick={() => props.setShowDetails(!props.showDetails)}
+              aria-expanded={props.showDetails}
+            >
+              <FileText />
+              {props.showDetails
+                ? 'Hide optional details'
+                : isEdit
+                  ? 'Add or edit details'
+                  : 'Add details (optional)'}
+              {props.showDetails ? <ChevronLeft /> : <ChevronRight />}
+            </button>
+
+            {props.showDetails && (
+              <label className="details-field" htmlFor="entry-details">
+                <span>Notes, outcome, or context</span>
+                <Textarea
+                  id="entry-details"
+                  // oxlint-disable-next-line jsx-a11y/no-autofocus -- the post-save action intentionally moves focus into the optional details field.
+                  autoFocus={props.focusDetails}
+                  value={props.details}
+                  onChange={(event) => props.setDetails(event.target.value)}
+                  className="min-h-24 rounded-none border-2 border-ink bg-white text-base"
+                  placeholder="What changed, what you decided, or anything worth remembering…"
+                  aria-label="Optional accomplishment details"
+                />
+              </label>
+            )}
             {props.error && (
               <p className="form-error" role="alert">
                 {props.error}
@@ -1859,18 +2043,22 @@ function readableAuthError(error: unknown) {
   return 'Something went wrong while signing in. Please try again.';
 }
 
-function findUsefulGap(entries: TimelineEntry[], endBoundary: number) {
-  const startBoundary = 6 * 60;
-  if (endBoundary <= startBoundary) return null;
+function findTimelineGaps(
+  entries: TimelineEntry[],
+  startBoundary: number,
+  endBoundary: number,
+) {
+  const gaps: Array<{ start: number; end: number }> = [];
+  if (endBoundary <= startBoundary) return gaps;
   let cursor = startBoundary;
   for (const entry of entries) {
     if (entry.endMinute <= startBoundary) continue;
-    if (entry.startMinute - cursor >= 30)
-      return { start: cursor, end: Math.min(entry.startMinute, endBoundary) };
+    const gapEnd = Math.min(entry.startMinute, endBoundary);
+    if (gapEnd - cursor >= 30) gaps.push({ start: cursor, end: gapEnd });
     cursor = Math.max(cursor, entry.endMinute);
-    if (cursor >= endBoundary) return null;
+    if (cursor >= endBoundary) return gaps;
   }
-  return endBoundary - cursor >= 30
-    ? { start: cursor, end: endBoundary }
-    : null;
+  if (endBoundary - cursor >= 30)
+    gaps.push({ start: cursor, end: endBoundary });
+  return gaps;
 }
