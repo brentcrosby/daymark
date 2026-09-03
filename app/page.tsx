@@ -99,7 +99,7 @@ type SyncStatus = 'local' | 'saved' | 'syncing' | 'offline' | 'error';
 
 const hours = Array.from({ length: 24 }, (_, index) => index);
 const SHORT_ENTRY_THRESHOLD = 30;
-const SHORT_ENTRY_MIN_HEIGHT = 20;
+const SHORT_ENTRY_MIN_HEIGHT = 15;
 
 export default function Home() {
   const [selectedDate, setSelectedDate] = useState('');
@@ -808,9 +808,9 @@ export default function Home() {
 
               <div className="timeline-entries" aria-live="polite">
                 {selectedEntries.map((entry) => {
-                  const durationMinutes = entry.endMinute - entry.startMinute;
                   const durationHeight =
-                    (durationMinutes / 60) * TIMELINE_ROW_HEIGHT;
+                    ((entry.endMinute - entry.startMinute) / 60) *
+                    TIMELINE_ROW_HEIGHT;
                   const isShort = durationHeight < SHORT_ENTRY_THRESHOLD;
                   const isExpanded = expandedEntryId === entry.id;
 
@@ -835,18 +835,6 @@ export default function Home() {
                       aria-expanded={isExpanded}
                       aria-label={`View or edit ${entry.title}, ${formatTime(entry.startMinute)} to ${formatTime(entry.endMinute)}`}
                     >
-                      {isShort && (
-                        <>
-                          <span
-                            className="timeline-entry-duration-rail"
-                            style={{ height: Math.max(4, durationHeight) }}
-                            aria-hidden="true"
-                          />
-                          <span className="timeline-entry-duration">
-                            {formatDuration(durationMinutes)}
-                          </span>
-                        </>
-                      )}
                       <span className="timeline-entry-summary">
                         {formatTime(entry.startMinute)} -{' '}
                         {formatTime(entry.endMinute)} - {entry.title}
