@@ -4,6 +4,7 @@ import {
   type CSSProperties,
   type ChangeEvent,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type SyntheticEvent,
   useEffect,
   useMemo,
@@ -112,6 +113,12 @@ import { cn } from '@/lib/utils';
 
 type EditorMode = 'quick' | 'detail' | 'edit';
 type SyncStatus = 'local' | 'saved' | 'syncing' | 'offline' | 'error';
+type TimelineDrag = {
+  pointerId: number;
+  anchorMinute: number;
+  startY: number;
+  moved: boolean;
+};
 
 const hours = Array.from({ length: 24 }, (_, index) => index);
 const SHORT_ENTRY_THRESHOLD = 30;
@@ -156,6 +163,11 @@ export default function Home() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [weeklyReviewOpen, setWeeklyReviewOpen] = useState(false);
   const [dayMarkersOpen, setDayMarkersOpen] = useState(false);
+  const [hoverMinute, setHoverMinute] = useState<number | null>(null);
+  const [dragRange, setDragRange] = useState<{
+    startMinute: number;
+    endMinute: number;
+  } | null>(null);
 
   const [accountOpen, setAccountOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
@@ -169,6 +181,9 @@ export default function Home() {
     useState<TimelineEntry | null>(null);
 
   const nowMarkerRef = useRef<HTMLDivElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const timelineDragRef = useRef<TimelineDrag | null>(null);
+  const suppressTimelineClickRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timelineEntryRefs = useRef(new Map<string, HTMLButtonElement>());
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -536,6 +551,10 @@ export default function Home() {
     event: MouseEvent<HTMLButtonElement>,
     hour: number,
   ) {
+    if (suppressTimelineClickRef.current) {
+      suppressTimelineClickRef.current = false;
+      return;
+    }
     const bounds = event.currentTarget.getBoundingClientRect();
     const relative = Math.max(
       0,
@@ -543,6 +562,118 @@ export default function Home() {
     );
     const quarter = Math.floor(relative / (bounds.height / 4));
     openDetailedAdd(hour * 60 + quarter * 15);
+  }
+
+  function timelineMinuteFromPointer(event: ReactPointerEvent<HTMLElement>) {
+    const bounds = timelineRef.current?.getBoundingClientRect();
+    if (!bounds) return 0;
+    const relative = Math.max(
+      0,
+      Math.min(bounds.height - 1, event.clientY - bounds.top),
+    );
+    return Math.min(24 * 60 - 5, snapMinute(relative, 5));
+  }
+
+  function supportsTimelinePrecision(event: ReactPointerEvent<HTMLElement>) {
+    return (
+      event.pointerType !== 'touch' &&
+      window.matchMedia('(hover: hover) and (pointer: fine)').matches
+    );
+  }
+
+  function isTimelineEntryTarget(event: ReactPointerEvent<HTMLElement>) {
+    return Boolean(
+      (event.target as HTMLElement).closest('.timeline-entry, .day-boundary'),
+    );
+  }
+
+  function rangeFromDrag(anchorMinute: number, currentMinute: number) {
+    return currentMinute >= anchorMinute
+      ? {
+          startMinute: anchorMinute,
+          endMinute: Math.min(
+            24 * 60 - 1,
+            Math.max(anchorMinute + 5, currentMinute),
+          ),
+        }
+      : { startMinute: currentMinute, endMinute: anchorMinute };
+  }
+
+  function handleTimelinePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (
+      event.button !== 0 ||
+      !supportsTimelinePrecision(event) ||
+      isTimelineEntryTarget(event)
+    ) {
+      return;
+    }
+    const anchorMinute = Math.min(
+      24 * 60 - 10,
+      timelineMinuteFromPointer(event),
+    );
+    timelineDragRef.current = {
+      pointerId: event.pointerId,
+      anchorMinute,
+      startY: event.clientY,
+      moved: false,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function handleTimelinePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!supportsTimelinePrecision(event)) return;
+    const minute = timelineMinuteFromPointer(event);
+    const drag = timelineDragRef.current;
+
+    if (!drag) {
+      setHoverMinute(isTimelineEntryTarget(event) ? null : minute);
+      return;
+    }
+    if (drag.pointerId !== event.pointerId) return;
+
+    if (!drag.moved && Math.abs(event.clientY - drag.startY) >= 4) {
+      drag.moved = true;
+    }
+    if (drag.moved) {
+      event.preventDefault();
+      setHoverMinute(null);
+      setDragRange(rangeFromDrag(drag.anchorMinute, minute));
+    }
+  }
+
+  function handleTimelinePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = timelineDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    timelineDragRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (!drag.moved) {
+      setDragRange(null);
+      return;
+    }
+
+    event.preventDefault();
+    const range = rangeFromDrag(
+      drag.anchorMinute,
+      timelineMinuteFromPointer(event),
+    );
+    setDragRange(null);
+    suppressTimelineClickRef.current = true;
+    window.setTimeout(() => {
+      suppressTimelineClickRef.current = false;
+    }, 0);
+    openGapAdd(range.startMinute, range.endMinute);
+  }
+
+  function handleTimelinePointerCancel(
+    event: ReactPointerEvent<HTMLDivElement>,
+  ) {
+    if (timelineDragRef.current?.pointerId !== event.pointerId) return;
+    timelineDragRef.current = null;
+    setDragRange(null);
+    setHoverMinute(null);
   }
 
   async function persistEntry(entry: TimelineEntry) {
@@ -1060,7 +1191,12 @@ export default function Home() {
                   {isToday ? 'Today’s timeline' : formatDay(selectedDate)}
                 </h2>
                 <p className="text-xs font-semibold text-muted-foreground">
-                  Tap any time to add a precise entry
+                  <span className="timeline-hint timeline-hint--desktop">
+                    Hover for exact time · drag blank time to select a range
+                  </span>
+                  <span className="timeline-hint timeline-hint--mobile">
+                    Tap any time to add a precise entry
+                  </span>
                 </p>
               </div>
               <div className="timeline-actions flex gap-1 sm:gap-2">
@@ -1103,7 +1239,20 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="timeline relative ml-1 sm:ml-5">
+            <div
+              ref={timelineRef}
+              className={cn(
+                'timeline relative ml-1 sm:ml-5',
+                dragRange && 'timeline--dragging',
+              )}
+              onPointerDown={handleTimelinePointerDown}
+              onPointerMove={handleTimelinePointerMove}
+              onPointerUp={handleTimelinePointerUp}
+              onPointerCancel={handleTimelinePointerCancel}
+              onPointerLeave={() => {
+                if (!timelineDragRef.current) setHoverMinute(null);
+              }}
+            >
               {hours.map((hour) => (
                 <button
                   key={hour}
@@ -1191,6 +1340,39 @@ export default function Home() {
                 </button>
               )}
 
+              {hoverMinute != null && !dragRange && (
+                <div
+                  className="timeline-hover-guide"
+                  style={{
+                    top: (hoverMinute / 60) * TIMELINE_ROW_HEIGHT,
+                  }}
+                  aria-hidden="true"
+                >
+                  <span>{formatTime(hoverMinute)}</span>
+                </div>
+              )}
+
+              {dragRange && (
+                <div
+                  className="timeline-drag-selection"
+                  style={{
+                    top: (dragRange.startMinute / 60) * TIMELINE_ROW_HEIGHT,
+                    height:
+                      ((dragRange.endMinute - dragRange.startMinute) / 60) *
+                      TIMELINE_ROW_HEIGHT,
+                  }}
+                  aria-hidden="true"
+                >
+                  <span>
+                    {formatTime(dragRange.startMinute)}–
+                    {formatTime(dragRange.endMinute)} ·{' '}
+                    {formatDuration(
+                      dragRange.endMinute - dragRange.startMinute,
+                    )}
+                  </span>
+                </div>
+              )}
+
               <div className="timeline-entries" aria-live="polite">
                 {timelineGaps.map((gap) => {
                   const duration = gap.end - gap.start;
@@ -1203,7 +1385,13 @@ export default function Home() {
                         top: (gap.start / 60) * TIMELINE_ROW_HEIGHT,
                         height: (duration / 60) * TIMELINE_ROW_HEIGHT,
                       }}
-                      onClick={() => openGapAdd(gap.start, gap.end)}
+                      onClick={() => {
+                        if (suppressTimelineClickRef.current) {
+                          suppressTimelineClickRef.current = false;
+                          return;
+                        }
+                        openGapAdd(gap.start, gap.end);
+                      }}
                       aria-label={`Fill unlogged time from ${formatTime(gap.start)} to ${formatTime(gap.end)}`}
                     >
                       <span>Fill {formatDuration(duration)} gap</span>

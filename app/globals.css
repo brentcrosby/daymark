@@ -183,6 +183,19 @@
 
 .timeline {
   height: 1440px;
+  touch-action: pan-y;
+}
+
+.timeline-hint {
+  display: block;
+}
+
+.timeline-hint--mobile {
+  display: block;
+}
+
+.timeline-hint--desktop {
+  display: none;
 }
 
 .timeline-row {
@@ -398,6 +411,88 @@
 
 .timeline-entry--flash {
   animation: entry-flash 1.05s ease;
+}
+
+.timeline-hover-guide {
+  position: absolute;
+  z-index: 7;
+  left: 55px;
+  right: 0;
+  height: 0;
+  border-top: 2px solid var(--blue);
+  pointer-events: none;
+}
+
+.timeline-hover-guide::before {
+  position: absolute;
+  top: -5px;
+  left: -5px;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+  background: var(--blue);
+  content: '';
+}
+
+.timeline-hover-guide span {
+  position: absolute;
+  top: -13px;
+  left: 9px;
+  border: 1.5px solid var(--ink);
+  background: #fff;
+  padding: 0.15rem 0.4rem;
+  font-family: var(--font-geist-mono);
+  font-size: 0.62rem;
+  font-weight: 950;
+  box-shadow: 2px 2px 0 var(--ink);
+  white-space: nowrap;
+}
+
+.timeline-drag-selection {
+  position: absolute;
+  z-index: 8;
+  left: 68px;
+  right: 12px;
+  min-height: 5px;
+  border: 2px solid var(--ink);
+  background: color-mix(in srgb, var(--blue) 28%, white);
+  pointer-events: none;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.timeline-drag-selection span {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  border: 1.5px solid var(--ink);
+  background: var(--blue);
+  padding: 0.15rem 0.4rem;
+  color: #fff;
+  font-family: var(--font-geist-mono);
+  font-size: 0.62rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.timeline--dragging {
+  cursor: ns-resize;
+  user-select: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .timeline-hint--desktop {
+    display: block;
+  }
+
+  .timeline-hint--mobile {
+    display: none;
+  }
+
+  .timeline-row,
+  .timeline-gap {
+    cursor: crosshair;
+  }
 }
 
 .now-line {
@@ -1605,6 +1700,14 @@
 
   .now-line {
     left: 44px;
+  }
+
+  .timeline-hover-guide {
+    display: none;
+  }
+
+  .timeline-drag-selection {
+    display: none;
   }
 
   .awake-window,
