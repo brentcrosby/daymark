@@ -2801,7 +2801,7 @@ function EntryDialog(props: EntryDialogProps) {
               value={props.title}
               onChange={(event) => props.setTitle(event.target.value)}
               onKeyDown={(event) => {
-                if (continueBulletList(event, props.title, props.setTitle)) {
+                if (continueList(event, props.title, props.setTitle)) {
                   return;
                 }
                 if (event.key === 'Enter' && !event.shiftKey) {
@@ -3049,12 +3049,10 @@ function EntryDialog(props: EntryDialogProps) {
                   value={props.details}
                   onChange={(event) => props.setDetails(event.target.value)}
                   onKeyDown={(event) =>
-                    continueBulletList(event, props.details, props.setDetails)
+                    continueList(event, props.details, props.setDetails)
                   }
                   className="min-h-24 rounded-none border-2 border-ink bg-white text-base"
-                  placeholder={
-                    'Add context…\n- Start a line with - for bullets'
-                  }
+                  placeholder={'Add context…\n- Bullet list\n1. Numbered list'}
                   aria-label="Optional accomplishment details"
                 />
               </label>
@@ -3298,7 +3296,7 @@ function mergeEntry(entries: TimelineEntry[], entry: TimelineEntry) {
   return next;
 }
 
-function continueBulletList(
+function continueList(
   event: ReactKeyboardEvent<HTMLTextAreaElement>,
   value: string,
   setValue: (value: string) => void,
@@ -3319,12 +3317,14 @@ function continueBulletList(
   const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
   const currentLine = value.slice(lineStart, selectionStart);
   const bullet = currentLine.match(/^(\s*)-\s(.*)$/);
-  if (!bullet) return false;
+  const numbered = currentLine.match(/^(\s*)(\d+)\.\s(.*)$/);
+  if (!bullet && !numbered) return false;
 
   event.preventDefault();
-  const indentation = bullet[1];
-  const content = bullet[2];
-  const insertion = content.trim() ? `\n${indentation}- ` : '';
+  const indentation = bullet?.[1] ?? numbered?.[1] ?? '';
+  const content = bullet?.[2] ?? numbered?.[3] ?? '';
+  const nextPrefix = bullet ? '- ' : `${Number(numbered?.[2] ?? 0) + 1}. `;
+  const insertion = content.trim() ? `\n${indentation}${nextPrefix}` : '';
   const replaceFrom = content.trim() ? selectionStart : lineStart;
   const nextValue =
     value.slice(0, replaceFrom) + insertion + value.slice(selectionEnd);
@@ -3348,11 +3348,19 @@ function FormattedEntryText({
     <div className={cn('formatted-entry-text', className)}>
       {blocks.map((block, index) =>
         block.type === 'list' ? (
-          <ul key={`list-${index}`}>
-            {block.items.map((item, itemIndex) => (
-              <li key={`${item}-${itemIndex}`}>{item}</li>
-            ))}
-          </ul>
+          block.style === 'ordered' ? (
+            <ol key={`list-${index}`} start={block.start}>
+              {block.items.map((item, itemIndex) => (
+                <li key={`${item}-${itemIndex}`}>{item}</li>
+              ))}
+            </ol>
+          ) : (
+            <ul key={`list-${index}`}>
+              {block.items.map((item, itemIndex) => (
+                <li key={`${item}-${itemIndex}`}>{item}</li>
+              ))}
+            </ul>
+          )
         ) : (
           <p key={`text-${index}`}>{block.lines.join('\n')}</p>
         ),
@@ -3363,17 +3371,35 @@ function FormattedEntryText({
 
 function entryTextBlocks(text: string) {
   const blocks: Array<
-    { type: 'text'; lines: string[] } | { type: 'list'; items: string[] }
+    | { type: 'text'; lines: string[] }
+    | { type: 'list'; style: 'unordered'; items: string[] }
+    | { type: 'list'; style: 'ordered'; start: number; items: string[] }
   > = [];
 
   for (const line of text.split('\n')) {
     const bullet = line.match(/^\s*-\s+(.+)$/);
+    const numbered = line.match(/^\s*(\d+)\.\s+(.+)$/);
     if (bullet) {
       const last = blocks.at(-1);
-      if (last?.type === 'list') {
+      if (last?.type === 'list' && last.style === 'unordered') {
         last.items.push(bullet[1]);
       } else {
-        blocks.push({ type: 'list', items: [bullet[1]] });
+        blocks.push({ type: 'list', style: 'unordered', items: [bullet[1]] });
+      }
+      continue;
+    }
+
+    if (numbered) {
+      const last = blocks.at(-1);
+      if (last?.type === 'list' && last.style === 'ordered') {
+        last.items.push(numbered[2]);
+      } else {
+        blocks.push({
+          type: 'list',
+          style: 'ordered',
+          start: Number(numbered[1]),
+          items: [numbered[2]],
+        });
       }
       continue;
     }
