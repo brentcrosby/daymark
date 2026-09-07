@@ -49,7 +49,6 @@ type NaturalEntryContext = {
 
 export const GUEST_STORAGE_KEY = 'daymark.entries.v1';
 export const REFLECTION_STORAGE_KEY = 'daymark.reflections.v1';
-export const DURATION_STORAGE_KEY = 'daymark.duration.v1';
 export const TIMELINE_ROW_HEIGHT = 60;
 
 export function dateKey(date = new Date()) {
@@ -110,12 +109,6 @@ export function formatTime(value: number) {
   const suffix = hours >= 12 ? 'PM' : 'AM';
   const displayHour = hours % 12 || 12;
   return `${displayHour}:${String(minutes).padStart(2, '0')} ${suffix}`;
-}
-
-export function formatHour(hour: number) {
-  if (hour === 0 || hour === 24) return '12 AM';
-  if (hour === 12) return '12 PM';
-  return `${hour > 12 ? hour - 12 : hour} ${hour > 12 ? 'PM' : 'AM'}`;
 }
 
 export function formatDuration(minutes: number) {
@@ -191,7 +184,7 @@ export function parseNaturalEntry(
     const hours = Number(durationMatch[1] ?? 0);
     const minutes = Number(durationMatch[2] ?? 0);
     const duration = Math.round(hours * 60 + minutes);
-    if (title && duration >= 5 && duration <= 12 * 60) {
+    if (title && duration >= 1 && duration <= 12 * 60) {
       if (context.anchor === 'before') {
         const endMinute = context.endMinute;
         return {

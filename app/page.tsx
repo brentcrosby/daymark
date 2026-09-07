@@ -13,7 +13,6 @@ import {
   useState,
 } from 'react';
 import {
-  ArrowDownToLine,
   BookOpenText,
   CalendarRange,
   CalendarDays,
@@ -81,14 +80,12 @@ import {
 } from '@/components/ui/popover';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  DURATION_STORAGE_KEY,
   TIMELINE_ROW_HEIGHT,
   dateFromKey,
   dateKey,
   entryColor,
   formatDay,
   formatDuration,
-  formatHour,
   formatTime,
   inputToMinute,
   isTimelineEntry,
@@ -142,7 +139,9 @@ type HistoryAction =
       after: DailyReflection | null;
     };
 
-const hours = Array.from({ length: 24 }, (_, index) => index);
+const DEFAULT_ENTRY_DURATION = 15;
+const DEFAULT_TIMELINE_START = 6 * 60;
+const DAY_MINUTES = 24 * 60;
 const SHORT_ENTRY_THRESHOLD = 30;
 const SHORT_ENTRY_MIN_HEIGHT = 15;
 const ENTRY_TEXT_MIN_HEIGHT = 24;
@@ -174,7 +173,6 @@ export default function Home() {
   const [focusEntryDetails, setFocusEntryDetails] = useState(false);
   const [entryStart, setEntryStart] = useState('09:00');
   const [entryEnd, setEntryEnd] = useState('09:30');
-  const [selectedDuration, setSelectedDuration] = useState(30);
   const [customDuration, setCustomDuration] = useState(false);
   const [entryError, setEntryError] = useState('');
   const [flashId, setFlashId] = useState<string | null>(null);
@@ -186,7 +184,7 @@ export default function Home() {
   const [weeklyReviewOpen, setWeeklyReviewOpen] = useState(false);
   const [dayMarkersOpen, setDayMarkersOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [hoverMinute, setHoverMinute] = useState<number | null>(null);
+  const [hoverPosition, setHoverPosition] = useState<number | null>(null);
   const [dragRange, setDragRange] = useState<{
     startMinute: number;
     endMinute: number;
@@ -303,16 +301,6 @@ export default function Home() {
     setIsOnline(navigator.onLine);
     refreshClockAndDay();
     const clock = setInterval(refreshClockAndDay, 30_000);
-    const rememberedDuration = Number(
-      window.localStorage.getItem(DURATION_STORAGE_KEY),
-    );
-    if (
-      Number.isFinite(rememberedDuration) &&
-      rememberedDuration >= 5 &&
-      rememberedDuration <= 12 * 60
-    )
-      setSelectedDuration(rememberedDuration);
-
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
@@ -422,16 +410,15 @@ export default function Home() {
     function handleHistoryShortcut(event: KeyboardEvent) {
       if (
         event.defaultPrevented ||
-        (!(event.metaKey || event.ctrlKey) || event.altKey) ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey ||
         event.key.toLowerCase() !== 'z'
       ) {
         return;
       }
       const target = event.target as HTMLElement | null;
       if (
-        target?.closest(
-          'input, textarea, select, [contenteditable="true"]',
-        )
+        target?.closest('input, textarea, select, [contenteditable="true"]')
       ) {
         return;
       }
@@ -468,20 +455,24 @@ export default function Home() {
       ),
     [selectedEntries],
   );
-  const gapStartMinute =
-    typeof selectedReflection?.wakeMinute === 'number'
-      ? Math.max(0, Math.min(24 * 60, selectedReflection.wakeMinute))
-      : 6 * 60;
-  const timelineGaps = useMemo(
+  const timelineStartMinute = useMemo(
     () =>
-      findTimelineGaps(
-        selectedEntries,
-        gapStartMinute,
-        isToday ? clockMinute : 24 * 60,
-      ),
-    [clockMinute, gapStartMinute, isToday, selectedEntries],
+      typeof selectedReflection?.wakeMinute === 'number'
+        ? normalizeDayMinute(selectedReflection.wakeMinute)
+        : DEFAULT_TIMELINE_START,
+    [selectedReflection?.wakeMinute],
   );
-  const suggestedGap = timelineGaps[0] ?? null;
+  const timelineHours = useMemo(
+    () =>
+      Array.from({ length: 24 }, (_, index) => {
+        const position = index * 60;
+        return {
+          position,
+          minute: timelineMinuteAtPosition(position, timelineStartMinute),
+        };
+      }),
+    [timelineStartMinute],
+  );
 
   const editorRange = useMemo(
     () => ({
@@ -522,7 +513,10 @@ export default function Home() {
   }
 
   function openQuickAdd() {
-    const endMinute = Math.max(5, snapMinute(minutesNow(), 5));
+    const endMinute = Math.max(
+      DEFAULT_ENTRY_DURATION,
+      Math.min(DAY_MINUTES - 1, minutesNow()),
+    );
     setSelectedDate(today);
     setEditorMode('quick');
     setEditingEntry(null);
@@ -530,7 +524,9 @@ export default function Home() {
     setEntryDetails('');
     setShowEntryDetails(false);
     setFocusEntryDetails(false);
-    setEntryStart(minuteToInput(Math.max(0, endMinute - selectedDuration)));
+    setEntryStart(
+      minuteToInput(Math.max(0, endMinute - DEFAULT_ENTRY_DURATION)),
+    );
     setEntryEnd(minuteToInput(endMinute));
     setCustomDuration(false);
     setEntryError('');
@@ -538,7 +534,10 @@ export default function Home() {
   }
 
   function openDetailedAdd(startMinute: number) {
-    const safeStart = Math.min(startMinute, 24 * 60 - 15);
+    const safeStart = Math.min(
+      startMinute,
+      DAY_MINUTES - DEFAULT_ENTRY_DURATION,
+    );
     setEditorMode('detail');
     setEditingEntry(null);
     setEntryTitle('');
@@ -546,16 +545,26 @@ export default function Home() {
     setShowEntryDetails(false);
     setFocusEntryDetails(false);
     setEntryStart(minuteToInput(safeStart));
-    setEntryEnd(
-      minuteToInput(Math.min(24 * 60 - 1, safeStart + selectedDuration)),
-    );
+    setEntryEnd(minuteToInput(safeStart + DEFAULT_ENTRY_DURATION));
     setCustomDuration(false);
     setEntryError('');
     setEntryOpen(true);
   }
 
-  function openGapAdd(startMinute: number, endMinute: number) {
-    const safeEnd = Math.min(24 * 60 - 1, endMinute);
+  function openRangeAdd(startPosition: number, endPosition: number) {
+    const startMinute = timelineMinuteAtPosition(
+      startPosition,
+      timelineStartMinute,
+    );
+    const endMinute = timelineMinuteAtPosition(
+      endPosition,
+      timelineStartMinute,
+    );
+    if (endMinute <= startMinute) {
+      openDetailedAdd(startMinute);
+      notify('Entries that cross midnight start as a 15-minute entry.');
+      return;
+    }
     setEditorMode('detail');
     setEditingEntry(null);
     setEntryTitle('');
@@ -563,8 +572,7 @@ export default function Home() {
     setShowEntryDetails(false);
     setFocusEntryDetails(false);
     setEntryStart(minuteToInput(startMinute));
-    setEntryEnd(minuteToInput(safeEnd));
-    setSelectedDuration(safeEnd - startMinute);
+    setEntryEnd(minuteToInput(endMinute));
     setCustomDuration(false);
     setEntryError('');
     setEntryOpen(true);
@@ -580,7 +588,6 @@ export default function Home() {
     setFocusEntryDetails(revealDetails);
     setEntryStart(minuteToInput(entry.startMinute));
     setEntryEnd(minuteToInput(entry.endMinute));
-    setSelectedDuration(entry.endMinute - entry.startMinute);
     setCustomDuration(false);
     setEntryError('');
     setEntryOpen(true);
@@ -591,14 +598,13 @@ export default function Home() {
     const currentEnd = editorRange.endMinute;
     const maxDuration =
       editorMode === 'quick'
-        ? Math.max(5, currentEnd)
-        : Math.max(5, 24 * 60 - 1 - currentStart);
+        ? Math.max(1, currentEnd)
+        : Math.max(1, DAY_MINUTES - 1 - currentStart);
     const safeDuration = Math.max(
-      5,
+      1,
       Math.min(maxDuration, Math.round(duration)),
     );
 
-    setSelectedDuration(safeDuration);
     if (editorMode === 'quick') {
       setEntryStart(minuteToInput(Math.max(0, currentEnd - safeDuration)));
     } else {
@@ -625,7 +631,7 @@ export default function Home() {
 
   function handleTimelineClick(
     event: MouseEvent<HTMLButtonElement>,
-    hour: number,
+    rowPosition: number,
   ) {
     if (suppressTimelineClickRef.current) {
       suppressTimelineClickRef.current = false;
@@ -636,18 +642,26 @@ export default function Home() {
       0,
       Math.min(bounds.height - 1, event.clientY - bounds.top),
     );
-    const quarter = Math.floor(relative / (bounds.height / 4));
-    openDetailedAdd(hour * 60 + quarter * 15);
+    const fiveMinuteSlice = Math.min(
+      11,
+      Math.floor(relative / (bounds.height / 12)),
+    );
+    openDetailedAdd(
+      timelineMinuteAtPosition(
+        rowPosition + fiveMinuteSlice * 5,
+        timelineStartMinute,
+      ),
+    );
   }
 
-  function timelineMinuteFromPointer(event: ReactPointerEvent<HTMLElement>) {
+  function timelinePositionFromPointer(event: ReactPointerEvent<HTMLElement>) {
     const bounds = timelineRef.current?.getBoundingClientRect();
     if (!bounds) return 0;
     const relative = Math.max(
       0,
       Math.min(bounds.height - 1, event.clientY - bounds.top),
     );
-    return Math.min(24 * 60 - 5, snapMinute(relative, 5));
+    return Math.min(DAY_MINUTES - 5, snapMinute(relative, 5));
   }
 
   function supportsTimelinePrecision(event: ReactPointerEvent<HTMLElement>) {
@@ -668,7 +682,7 @@ export default function Home() {
       ? {
           startMinute: anchorMinute,
           endMinute: Math.min(
-            24 * 60 - 1,
+            DAY_MINUTES,
             Math.max(anchorMinute + 5, currentMinute),
           ),
         }
@@ -684,8 +698,8 @@ export default function Home() {
       return;
     }
     const anchorMinute = Math.min(
-      24 * 60 - 10,
-      timelineMinuteFromPointer(event),
+      DAY_MINUTES - 10,
+      timelinePositionFromPointer(event),
     );
     timelineDragRef.current = {
       pointerId: event.pointerId,
@@ -698,11 +712,11 @@ export default function Home() {
 
   function handleTimelinePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     if (!supportsTimelinePrecision(event)) return;
-    const minute = timelineMinuteFromPointer(event);
+    const minute = timelinePositionFromPointer(event);
     const drag = timelineDragRef.current;
 
     if (!drag) {
-      setHoverMinute(isTimelineEntryTarget(event) ? null : minute);
+      setHoverPosition(isTimelineEntryTarget(event) ? null : minute);
       return;
     }
     if (drag.pointerId !== event.pointerId) return;
@@ -712,7 +726,7 @@ export default function Home() {
     }
     if (drag.moved) {
       event.preventDefault();
-      setHoverMinute(null);
+      setHoverPosition(null);
       setDragRange(rangeFromDrag(drag.anchorMinute, minute));
     }
   }
@@ -731,21 +745,23 @@ export default function Home() {
       window.setTimeout(() => {
         suppressTimelineClickRef.current = false;
       }, 0);
-      openDetailedAdd(drag.anchorMinute);
+      openDetailedAdd(
+        timelineMinuteAtPosition(drag.anchorMinute, timelineStartMinute),
+      );
       return;
     }
 
     event.preventDefault();
     const range = rangeFromDrag(
       drag.anchorMinute,
-      timelineMinuteFromPointer(event),
+      timelinePositionFromPointer(event),
     );
     setDragRange(null);
     suppressTimelineClickRef.current = true;
     window.setTimeout(() => {
       suppressTimelineClickRef.current = false;
     }, 0);
-    openGapAdd(range.startMinute, range.endMinute);
+    openRangeAdd(range.startMinute, range.endMinute);
   }
 
   function handleTimelinePointerCancel(
@@ -754,7 +770,7 @@ export default function Home() {
     if (timelineDragRef.current?.pointerId !== event.pointerId) return;
     timelineDragRef.current = null;
     setDragRange(null);
-    setHoverMinute(null);
+    setHoverPosition(null);
   }
 
   async function persistEntry(entry: TimelineEntry) {
@@ -844,7 +860,10 @@ export default function Home() {
     });
   }
 
-  async function applyHistory(action: HistoryAction, direction: 'undo' | 'redo') {
+  async function applyHistory(
+    action: HistoryAction,
+    direction: 'undo' | 'redo',
+  ) {
     if (action.kind === 'entry') {
       const target = direction === 'undo' ? action.before : action.after;
       if (target) {
@@ -1027,11 +1046,6 @@ export default function Home() {
       before: previousEntry,
       after: entry,
     });
-    setSelectedDuration(range.endMinute - range.startMinute);
-    window.localStorage.setItem(
-      DURATION_STORAGE_KEY,
-      String(range.endMinute - range.startMinute),
-    );
     setEntryOpen(false);
     setEntryTitle('');
     setEntryDetails('');
@@ -1540,17 +1554,17 @@ export default function Home() {
               onPointerUp={handleTimelinePointerUp}
               onPointerCancel={handleTimelinePointerCancel}
               onPointerLeave={() => {
-                if (!timelineDragRef.current) setHoverMinute(null);
+                if (!timelineDragRef.current) setHoverPosition(null);
               }}
             >
-              {hours.map((hour) => (
+              {timelineHours.map(({ position, minute }) => (
                 <button
-                  key={hour}
+                  key={position}
                   className="timeline-row group"
                   type="button"
-                  onClick={(event) => handleTimelineClick(event, hour)}
+                  onClick={(event) => handleTimelineClick(event, position)}
                 >
-                  <span className="timeline-label">{formatHour(hour)}</span>
+                  <span className="timeline-label">{formatTime(minute)}</span>
                   <span className="timeline-rule">
                     <i />
                     <i />
@@ -1563,7 +1577,15 @@ export default function Home() {
                 <div
                   ref={nowMarkerRef}
                   className="now-line"
-                  style={{ top: (currentMinute / 60) * TIMELINE_ROW_HEIGHT }}
+                  style={{
+                    top:
+                      (timelinePositionForMinute(
+                        currentMinute,
+                        timelineStartMinute,
+                      ) /
+                        60) *
+                      TIMELINE_ROW_HEIGHT,
+                  }}
                 >
                   <span>NOW</span>
                 </div>
@@ -1576,12 +1598,12 @@ export default function Home() {
                   <div
                     className="awake-window"
                     style={{
-                      top:
-                        (selectedReflection.wakeMinute / 60) *
-                        TIMELINE_ROW_HEIGHT,
+                      top: 0,
                       height:
-                        ((Math.min(selectedReflection.sleepMinute, 24 * 60) -
-                          selectedReflection.wakeMinute) /
+                        (timelinePositionForBoundary(
+                          selectedReflection.sleepMinute,
+                          timelineStartMinute,
+                        ) /
                           60) *
                         TIMELINE_ROW_HEIGHT,
                     }}
@@ -1594,9 +1616,7 @@ export default function Home() {
                   type="button"
                   className="day-boundary day-boundary--wake"
                   style={{
-                    top:
-                      (selectedReflection.wakeMinute / 60) *
-                      TIMELINE_ROW_HEIGHT,
+                    top: 0,
                   }}
                   onClick={() => setDayMarkersOpen(true)}
                   aria-label={`Woke up at ${formatBoundaryTime(selectedReflection.wakeMinute)}`}
@@ -1614,7 +1634,11 @@ export default function Home() {
                   className="day-boundary day-boundary--sleep"
                   style={{
                     top:
-                      (Math.min(selectedReflection.sleepMinute, 24 * 60) / 60) *
+                      (timelinePositionForBoundary(
+                        selectedReflection.sleepMinute,
+                        timelineStartMinute,
+                      ) /
+                        60) *
                       TIMELINE_ROW_HEIGHT,
                   }}
                   onClick={() => setDayMarkersOpen(true)}
@@ -1627,15 +1651,17 @@ export default function Home() {
                 </button>
               )}
 
-              {hoverMinute != null && !dragRange && (
+              {hoverPosition != null && !dragRange && (
                 <div
                   className="timeline-hover-guide"
                   style={{
-                    top: (hoverMinute / 60) * TIMELINE_ROW_HEIGHT,
+                    top: (hoverPosition / 60) * TIMELINE_ROW_HEIGHT,
                   }}
                   aria-hidden="true"
                 >
-                  <span>{formatTime(hoverMinute)}</span>
+                  <span>
+                    {formatTimelinePosition(hoverPosition, timelineStartMinute)}
+                  </span>
                 </div>
               )}
 
@@ -1651,8 +1677,16 @@ export default function Home() {
                   aria-hidden="true"
                 >
                   <span>
-                    {formatTime(dragRange.startMinute)}–
-                    {formatTime(dragRange.endMinute)} ·{' '}
+                    {formatTimelinePosition(
+                      dragRange.startMinute,
+                      timelineStartMinute,
+                    )}
+                    –
+                    {formatTimelinePosition(
+                      dragRange.endMinute,
+                      timelineStartMinute,
+                    )}{' '}
+                    ·{' '}
                     {formatDuration(
                       dragRange.endMinute - dragRange.startMinute,
                     )}
@@ -1661,33 +1695,21 @@ export default function Home() {
               )}
 
               <div className="timeline-entries" aria-live="polite">
-                {timelineGaps.map((gap) => {
-                  const duration = gap.end - gap.start;
-                  return (
-                    <button
-                      key={`${gap.start}-${gap.end}`}
-                      type="button"
-                      className="timeline-gap"
-                      style={{
-                        top: (gap.start / 60) * TIMELINE_ROW_HEIGHT,
-                        height: (duration / 60) * TIMELINE_ROW_HEIGHT,
-                      }}
-                      onClick={() => {
-                        if (suppressTimelineClickRef.current) {
-                          suppressTimelineClickRef.current = false;
-                          return;
-                        }
-                        openGapAdd(gap.start, gap.end);
-                      }}
-                      aria-label={`Fill unlogged time from ${formatTime(gap.start)} to ${formatTime(gap.end)}`}
-                    >
-                      <span>Fill {formatDuration(duration)} gap</span>
-                    </button>
-                  );
-                })}
                 {selectedEntries.map((entry) => {
+                  const visualStartMinute = snapTimelinePosition(
+                    timelinePositionForMinute(
+                      entry.startMinute,
+                      timelineStartMinute,
+                    ),
+                  );
+                  const visualEndMinute = snapTimelineEnd(
+                    timelinePositionForMinute(
+                      entry.endMinute,
+                      timelineStartMinute,
+                    ),
+                  );
                   const durationHeight =
-                    ((entry.endMinute - entry.startMinute) / 60) *
+                    (Math.max(5, visualEndMinute - visualStartMinute) / 60) *
                     TIMELINE_ROW_HEIGHT;
                   const isShort = durationHeight < SHORT_ENTRY_THRESHOLD;
                   const renderedHeight = isShort
@@ -1720,7 +1742,7 @@ export default function Home() {
                       )}
                       style={
                         {
-                          top: (entry.startMinute / 60) * TIMELINE_ROW_HEIGHT,
+                          top: (visualStartMinute / 60) * TIMELINE_ROW_HEIGHT,
                           height: renderedHeight,
                           '--entry-base-height': `${renderedHeight}px`,
                         } as CSSProperties
@@ -1737,27 +1759,6 @@ export default function Home() {
                   );
                 })}
               </div>
-
-              {guestLoaded && selectedEntries.length === 0 && (
-                <div className="empty-timeline">
-                  <span className="grid size-11 place-items-center border-2 border-ink bg-sun">
-                    <ArrowDownToLine />
-                  </span>
-                  <div>
-                    <strong>Nothing logged yet.</strong>
-                    <p>
-                      Start with what you just finished—you can fill the rest in
-                      later.
-                    </p>
-                  </div>
-                  <Button
-                    className="rounded-none border-2 border-ink bg-blue font-black shadow-[3px_3px_0_#111]"
-                    onClick={openQuickAdd}
-                  >
-                    <Plus /> Quick add
-                  </Button>
-                </div>
-              )}
             </div>
           </section>
 
@@ -1779,31 +1780,6 @@ export default function Home() {
               >
                 <Plus className="size-5" /> Quick add
               </Button>
-            </div>
-
-            <div className="border-2 border-ink bg-white p-5">
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground">
-                A small nudge
-              </p>
-              {suggestedGap ? (
-                <>
-                  <p className="mt-3 text-lg font-black leading-snug">
-                    There’s an open stretch from{' '}
-                    {formatTime(suggestedGap.start)} to{' '}
-                    {formatTime(suggestedGap.end)}.
-                  </p>
-                  <button
-                    className="mt-4 inline-flex items-center gap-1 text-sm font-black underline decoration-2 underline-offset-4"
-                    onClick={() => openDetailedAdd(suggestedGap.start)}
-                  >
-                    Fill the gap <ChevronRight className="size-4" />
-                  </button>
-                </>
-              ) : (
-                <p className="mt-3 text-lg font-black leading-snug">
-                  Your day is looking nicely filled in.
-                </p>
-              )}
             </div>
 
             <SyncIndicator
@@ -1847,14 +1823,10 @@ export default function Home() {
         start={entryStart}
         setStart={(time) => {
           setEntryStart(time);
-          const nextDuration = inputToMinute(entryEnd) - inputToMinute(time);
-          if (nextDuration > 0) setSelectedDuration(nextDuration);
         }}
         end={entryEnd}
         setEnd={(time) => {
           setEntryEnd(time);
-          const nextDuration = inputToMinute(time) - inputToMinute(entryStart);
-          if (nextDuration > 0) setSelectedDuration(nextDuration);
         }}
         range={editorRange}
         error={entryError}
@@ -2202,7 +2174,7 @@ function HelpDialog({
             How Daymark works
           </DialogTitle>
           <DialogDescription className="font-semibold text-ink/75">
-            Record what happened, fill the gaps, and look back on your day.
+            Record what happened and look back on your day.
           </DialogDescription>
         </DialogHeader>
 
@@ -3092,7 +3064,7 @@ function EntryDialog(props: EntryDialogProps) {
                   <button
                     type="button"
                     onClick={() => props.setDuration(props.duration - 60)}
-                    disabled={props.duration <= 5}
+                    disabled={props.duration <= 1}
                     aria-label="Decrease duration by one hour"
                   >
                     <ChevronLeft />
@@ -3124,7 +3096,7 @@ function EntryDialog(props: EntryDialogProps) {
                   <button
                     type="button"
                     onClick={() => props.setDuration(props.duration - 5)}
-                    disabled={props.duration <= 5}
+                    disabled={props.duration <= 1}
                     aria-label="Decrease duration by five minutes"
                   >
                     <ChevronLeft />
@@ -3133,7 +3105,7 @@ function EntryDialog(props: EntryDialogProps) {
                     <input
                       type="number"
                       min="0"
-                      step="5"
+                      step="1"
                       inputMode="numeric"
                       value={minutesText}
                       onChange={(event) => updateMinutes(event.target.value)}
@@ -3717,22 +3689,34 @@ function startOfWeekKey(key: string) {
   return dateKey(date);
 }
 
-function findTimelineGaps(
-  entries: TimelineEntry[],
-  startBoundary: number,
-  endBoundary: number,
-) {
-  const gaps: Array<{ start: number; end: number }> = [];
-  if (endBoundary <= startBoundary) return gaps;
-  let cursor = startBoundary;
-  for (const entry of entries) {
-    if (entry.endMinute <= startBoundary) continue;
-    const gapEnd = Math.min(entry.startMinute, endBoundary);
-    if (gapEnd - cursor >= 30) gaps.push({ start: cursor, end: gapEnd });
-    cursor = Math.max(cursor, entry.endMinute);
-    if (cursor >= endBoundary) return gaps;
-  }
-  if (endBoundary - cursor >= 30)
-    gaps.push({ start: cursor, end: endBoundary });
-  return gaps;
+function normalizeDayMinute(minute: number) {
+  return ((minute % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
+}
+
+function timelineMinuteAtPosition(position: number, startMinute: number) {
+  return normalizeDayMinute(startMinute + position);
+}
+
+function timelinePositionForMinute(minute: number, startMinute: number) {
+  return normalizeDayMinute(minute - startMinute);
+}
+
+function timelinePositionForBoundary(minute: number, startMinute: number) {
+  const position = minute - startMinute;
+  return position < 0 ? position + DAY_MINUTES : position;
+}
+
+function snapTimelinePosition(position: number) {
+  return Math.min(DAY_MINUTES - 5, snapMinute(position, 5));
+}
+
+function snapTimelineEnd(position: number) {
+  return Math.max(5, Math.min(DAY_MINUTES, snapMinute(position, 5)));
+}
+
+function formatTimelinePosition(position: number, startMinute: number) {
+  const absoluteMinute = startMinute + position;
+  return `${formatTime(normalizeDayMinute(absoluteMinute))}${
+    absoluteMinute >= DAY_MINUTES ? ' next day' : ''
+  }`;
 }

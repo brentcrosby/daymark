@@ -275,45 +275,6 @@
     filter 120ms ease;
 }
 
-.timeline-gap {
-  position: absolute;
-  left: 0;
-  z-index: 1;
-  width: 100%;
-  min-height: 30px;
-  display: grid;
-  place-items: center;
-  border: 1px dashed #b8b4aa;
-  background: color-mix(in srgb, var(--muted) 34%, transparent);
-  color: #716d65;
-  pointer-events: auto;
-  transition:
-    border-color 120ms ease,
-    background 120ms ease,
-    color 120ms ease;
-}
-
-.timeline-gap span {
-  border: 1px solid transparent;
-  padding: 0.15rem 0.4rem;
-  font-size: 0.65rem;
-  font-weight: 850;
-}
-
-.timeline-gap:hover,
-.timeline-gap:focus-visible {
-  z-index: 2;
-  border-color: var(--ink);
-  background: color-mix(in srgb, var(--sun) 22%, transparent);
-  color: var(--ink);
-}
-
-.timeline-gap:hover span,
-.timeline-gap:focus-visible span {
-  border-color: var(--ink);
-  background: #fff;
-}
-
 .timeline-entry:hover,
 .timeline-entry:focus-visible {
   z-index: 5;
@@ -465,8 +426,7 @@
     display: none;
   }
 
-  .timeline-row,
-  .timeline-gap {
+  .timeline-row {
     cursor: default;
   }
 }
@@ -556,39 +516,6 @@
 .day-boundary--sleep > span {
   background: var(--blue);
   color: #fff;
-}
-
-.empty-timeline {
-  position: absolute;
-  z-index: 12;
-  top: 360px;
-  left: 50%;
-  width: min(450px, calc(100% - 32px));
-  transform: translateX(-50%);
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 0.8rem 1rem;
-  border: 2px solid var(--ink);
-  background: #fff;
-  padding: 1rem;
-  box-shadow: 5px 5px 0 var(--ink);
-}
-
-.empty-timeline strong {
-  display: block;
-  font-size: 1rem;
-  font-weight: 900;
-}
-
-.empty-timeline p {
-  margin-top: 0.1rem;
-  color: var(--muted-foreground);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.empty-timeline > button {
-  grid-column: 1 / -1;
 }
 
 .duration-chip {
@@ -2065,15 +1992,6 @@
     grid-template-columns: 1fr;
     gap: 0.35rem;
     padding: 0.9rem 1rem;
-  }
-
-  .empty-timeline {
-    top: 300px;
-    grid-template-columns: 1fr;
-  }
-
-  .empty-timeline > span {
-    display: none;
   }
 
   .app-toast {
