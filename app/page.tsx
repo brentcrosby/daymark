@@ -462,7 +462,7 @@ export default function Home() {
   const timelineStartMinute = useMemo(
     () =>
       typeof selectedReflection?.wakeMinute === 'number'
-        ? normalizeDayMinute(selectedReflection.wakeMinute)
+        ? floorToHour(selectedReflection.wakeMinute)
         : DEFAULT_TIMELINE_START,
     [selectedReflection?.wakeMinute],
   );
@@ -1602,12 +1602,22 @@ export default function Home() {
                   <div
                     className="awake-window"
                     style={{
-                      top: 0,
-                      height:
+                      top:
                         (timelinePositionForBoundary(
-                          selectedReflection.sleepMinute,
+                          selectedReflection.wakeMinute,
                           timelineStartMinute,
                         ) /
+                          60) *
+                        TIMELINE_ROW_HEIGHT,
+                      height:
+                        ((timelinePositionForBoundary(
+                          selectedReflection.sleepMinute,
+                          timelineStartMinute,
+                        ) -
+                          timelinePositionForBoundary(
+                            selectedReflection.wakeMinute,
+                            timelineStartMinute,
+                          )) /
                           60) *
                         TIMELINE_ROW_HEIGHT,
                     }}
@@ -1620,7 +1630,13 @@ export default function Home() {
                   type="button"
                   className="day-boundary day-boundary--wake"
                   style={{
-                    top: 0,
+                    top:
+                      (timelinePositionForBoundary(
+                        selectedReflection.wakeMinute,
+                        timelineStartMinute,
+                      ) /
+                        60) *
+                      TIMELINE_ROW_HEIGHT,
                   }}
                   onClick={() => setDayMarkersOpen(true)}
                   aria-label={`Woke up at ${formatBoundaryTime(selectedReflection.wakeMinute)}`}
@@ -3722,6 +3738,10 @@ function startOfWeekKey(key: string) {
 
 function normalizeDayMinute(minute: number) {
   return ((minute % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
+}
+
+function floorToHour(minute: number) {
+  return Math.floor(normalizeDayMinute(minute) / 60) * 60;
 }
 
 function timelineMinuteAtPosition(position: number, startMinute: number) {
