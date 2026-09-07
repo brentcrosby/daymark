@@ -243,7 +243,11 @@ export default function Home() {
           '.timeline-entry-summary',
         );
 
-        if (summary && summary.scrollWidth > summary.clientWidth + 1) {
+        if (
+          summary &&
+          (summary.scrollWidth > summary.clientWidth + 1 ||
+            summary.scrollHeight > summary.clientHeight + 1)
+        ) {
           next.add(entry.id);
         }
       });
@@ -1719,7 +1723,7 @@ export default function Home() {
                   const needsExpansion =
                     hidesText || overflowingEntryIds.has(entry.id);
                   const isExpanded = expandedEntryId === entry.id;
-                  const entrySummary = `${formatTime(entry.startMinute)} - ${formatTime(entry.endMinute)} - ${entry.title}`;
+                  const entryTime = `${formatTime(entry.startMinute)} - ${formatTime(entry.endMinute)}`;
 
                   return (
                     <button
@@ -1752,9 +1756,10 @@ export default function Home() {
                       aria-expanded={isExpanded}
                       aria-label={`View or edit ${entry.title}, ${formatTime(entry.startMinute)} to ${formatTime(entry.endMinute)}`}
                     >
-                      <span className="timeline-entry-summary">
-                        {entrySummary}
-                      </span>
+                      <TimelineEntrySummary
+                        time={entryTime}
+                        title={entry.title}
+                      />
                     </button>
                   );
                 })}
@@ -3551,6 +3556,32 @@ function FormattedEntryText({
           <p key={`text-${index}`}>{block.lines.join('\n')}</p>
         ),
       )}
+    </div>
+  );
+}
+
+function TimelineEntrySummary({
+  time,
+  title,
+}: {
+  time: string;
+  title: string;
+}) {
+  const beginsWithList = /^\s*(?:-|\d+\.)\s+/.test(title);
+
+  if (!beginsWithList) {
+    return (
+      <FormattedEntryText
+        text={`${time} - ${title}`}
+        className="timeline-entry-summary"
+      />
+    );
+  }
+
+  return (
+    <div className="timeline-entry-summary timeline-entry-summary--list">
+      <span className="timeline-entry-time">{time}</span>
+      <FormattedEntryText text={title} className="timeline-entry-content" />
     </div>
   );
 }

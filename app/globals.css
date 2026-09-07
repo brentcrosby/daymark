@@ -303,10 +303,34 @@
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 0.78rem;
   font-weight: 850;
   line-height: 1.25;
+}
+
+.timeline-entry-summary > p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timeline-entry-summary--list .timeline-entry-time {
+  display: block;
+  margin-bottom: 0.15rem;
+  white-space: nowrap;
+}
+
+.timeline-entry-summary .formatted-entry-text > * + * {
+  margin-top: 0.2rem;
+}
+
+.timeline-entry-summary .formatted-entry-text ul,
+.timeline-entry-summary .formatted-entry-text ol {
+  padding-left: 1.1rem;
+}
+
+.timeline-entry-summary .formatted-entry-text li + li {
+  margin-top: 0.1rem;
 }
 
 .timeline-entry--text-hidden .timeline-entry-summary {
@@ -328,7 +352,13 @@
     overflow: visible;
     opacity: 1;
     text-overflow: clip;
-    white-space: normal;
+  }
+
+  .timeline-entry--needs-expansion:hover .timeline-entry-summary > p,
+  .timeline-entry--needs-expansion:focus-visible .timeline-entry-summary > p {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: pre-wrap;
   }
 }
 
